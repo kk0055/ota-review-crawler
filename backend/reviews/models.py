@@ -57,7 +57,6 @@ class Hotel(models.Model):
         blank=True,
         help_text="このホテルの口コミ一覧ページのURL",
     )
-    address = models.CharField("住所", max_length=300, null=True, blank=True)
 
     created_at = models.DateTimeField("登録日時", auto_now_add=True)
     updated_at = models.DateTimeField("更新日時", auto_now=True)
