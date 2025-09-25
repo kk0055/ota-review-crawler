@@ -1,0 +1,198 @@
+from django.db import models
+from django.utils import timezone
+import hashlib
+
+# -----------------------------------------------------------------------------
+# 1. OTAモデル: OTAサイトのマスター情報を管理
+# -----------------------------------------------------------------------------
+class Ota(models.Model):
+    """OTAサイト (例: Booking.com, Agoda) の情報を格納するモデル"""
+
+    name = models.CharField(
+        "OTA名",
+        max_length=50,
+        unique=True,
+        help_text="OTAサイトの名前 (例: Booking.com)",
+    )
+    base_url = models.URLField(
+        "ベースURL",
+        max_length=255,
+        help_text="OTAサイトのトップページのURL",
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField("登録日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "OTAサイト"
+        verbose_name_plural = "OTAサイト"
+
+    def __str__(self):
+        return self.name
+
+
+# -----------------------------------------------------------------------------
+# 2. Hotelモデル: クロール対象となるホテルの情報を管理
+# -----------------------------------------------------------------------------
+class Hotel(models.Model):
+    """クロール対象となるホテル情報をOTAサイトごとに格納するモデル"""
+
+    ota = models.ForeignKey(
+        Ota, verbose_name="OTAサイト", on_delete=models.CASCADE, related_name="hotels"
+    )
+    hotel_id_in_ota = models.CharField(
+        "OTA内のホテルID",
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="各OTAサイト内でホテルを一位に識別するID",
+    )
+    hotel_name = models.CharField("ホテル名", max_length=200)
+    crawl_url = models.URLField(
+        "クロール対象URL",
+        max_length=512,  # URLは長くなる可能性があるので余裕を持たせる
+        null=True,
+        blank=True,
+        help_text="このホテルの口コミ一覧ページのURL",
+    )
+    address = models.CharField("住所", max_length=300, null=True, blank=True)
+
+    created_at = models.DateTimeField("登録日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "ホテル（クロール対象）"
+        verbose_name_plural = "ホテル（クロール対象）"
+        ordering = ["ota", "hotel_name"]
+        constraints = [
+            # otaとhotel_id_in_otaの組み合わせでユニークにする
+            models.UniqueConstraint(
+                fields=["ota", "hotel_id_in_ota"], name="unique_ota_hotel"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.hotel_name} ({self.ota.name})"
+
+
+# -----------------------------------------------------------------------------
+# 3. Reviewモデル: 口コミ情報を詳細に管理
+# -----------------------------------------------------------------------------
+class Review(models.Model):
+    """各OTAサイトから収集した詳細な口コミ情報を格納するモデル"""
+
+    # --- 関連情報 ---
+    ota = models.ForeignKey(
+        Ota, verbose_name="OTAサイト", on_delete=models.CASCADE, related_name="reviews"
+    )
+    hotel = models.ForeignKey(
+        Hotel, verbose_name="ホテル", on_delete=models.CASCADE, related_name="reviews"
+    )
+    review_id_in_ota = models.CharField(
+        "OTA内の口コミID", max_length=50, null=True, blank=True,
+        help_text="取得できる場合のみ格納"
+    )
+    review_hash = models.CharField(
+        "レビューハッシュ",
+        max_length=64,  # SHA256のハッシュ値（64文字）を想定
+        unique=True,  # このフィールドでユニーク性を担保する
+        db_index=True,  # 検索パフォーマンス向上のためインデックスを付与
+        editable=False,  # 管理画面などでは編集不可にする
+        help_text="レビュー内容から生成された一意のハッシュ値。重複登録の防止に利用。",
+    )
+    # --- レビュアー情報 ---
+    reviewer_name = models.CharField(
+        "投稿者の表示名", max_length=255, null=True, blank=True
+    )
+
+    nationality_region = models.CharField(
+        "国籍（大分類）", max_length=100, null=True, blank=True
+    )
+    nationality_country = models.CharField(
+        "国籍（小分類）", max_length=100, null=True, blank=True
+    )
+    traveler_type = models.CharField("旅行形態", max_length=50, null=True, blank=True)
+    purpose_of_visit = models.CharField(
+        "旅行の目的", max_length=50, null=True, blank=True
+    )
+    gender = models.CharField("性別", max_length=20, null=True, blank=True)
+    age_group = models.CharField("年代", max_length=20, null=True, blank=True)
+
+    # --- 評価スコア ---
+    overall_score = models.DecimalField(
+        "総合評価点", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+
+    location_score = models.DecimalField(
+        "立地スコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+    service_score = models.DecimalField(
+        "サービススコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+    cleanliness_score = models.DecimalField(
+        "清潔感スコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+    facilities_score = models.DecimalField(
+        "施設スコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+    food_score = models.DecimalField(
+        "食事スコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+    price_performance_score = models.DecimalField(
+        "コスパスコア", max_digits=3, decimal_places=1, null=True, blank=True
+    )
+
+    # --- 口コミ本文 ---
+    review_title = models.CharField(
+        "口コミタイトル", max_length=255, null=True, blank=True
+    )
+    review_language = models.CharField("言語", max_length=50, null=True, blank=True)
+    review_comment = models.TextField("口コミ本文", null=True, blank=True)
+    location_comment = models.TextField("立地に関するコメント", null=True, blank=True)
+    service_comment = models.TextField(
+        "サービスに関するコメント", null=True, blank=True
+    )
+    cleanliness_comment = models.TextField(
+        "清潔感に関するコメント", null=True, blank=True
+    )
+    facilities_comment = models.TextField("施設に関するコメント", null=True, blank=True)
+    room_comment = models.TextField("客室に関するコメント", null=True, blank=True)
+    bath_comment = models.TextField("風呂に関するコメント", null=True, blank=True)
+    food_comment = models.TextField("食事全般に関するコメント", null=True, blank=True)
+    breakfast_comment = models.TextField("朝食に関するコメント", null=True, blank=True)
+    dinner_comment = models.TextField("夕食に関するコメント", null=True, blank=True)
+
+    # --- 予約情報 (取得できない場合を考慮し、nullを許可) ---
+    room_type = models.CharField("部屋タイプ", max_length=255, null=True, blank=True)
+    price = models.DecimalField(
+        "価格",
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="予約時の価格。通貨はcurrencyフィールドで指定。",
+    )
+    currency = models.CharField(
+        "通貨",
+        max_length=3,
+        null=True,
+        blank=True,
+        help_text="価格の通貨コード (例: JPY, USD)",
+    )
+    # --- 日時情報 ---
+    review_date = models.DateField("口コミ投稿日", null=True, blank=True)
+    crawled_at = models.DateTimeField("データ取得日時", default=timezone.now)
+    created_at = models.DateTimeField("DB登録日時", auto_now_add=True)
+    updated_at = models.DateTimeField("データ更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "口コミ情報"
+        verbose_name_plural = "口コミ情報"
+        ordering = ["-review_date"]
+
+    def __str__(self):
+        # 識別しやすいようにIDまたはハッシュの先頭を表示
+        display_id = self.review_id_in_ota or f"hash:{self.review_hash[:7]}"
+        return f"Review ({display_id}) for {self.hotel.hotel_name}"

@@ -1,0 +1,52 @@
+
+### Python / Django ###
+# 仮想環境
+backend/venv/
+
+# 開発用データベース
+backend/db.sqlite3
+
+# Pythonのコンパイル済みファイル
+backend/*.pyc
+
+# 環境変数ファイル (バックエンド用)
+backend/.env
+
+# Pythonキャッシュファイル
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+### Node.js / Next.js ###
+# 依存パッケージ
+frontend/node_modules/
+
+# Next.jsのビルドキャッシュと成果物
+frontend/.next/
+frontend/out/
+
+# 環境変数ファイル (フロントエンド用)
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.production.local
+
+# ビルド/配布用ディレクトリ
+/frontend/build/
+/frontend/dist/
+build/
+dist/
+
+# ログファイル
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+
+### OS / Editor ###
+# VSCodeの設定
+.vscode/
+
+# Macのシステムファイル
+.DS_Store
