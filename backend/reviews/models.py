@@ -148,7 +148,8 @@ class Review(models.Model):
         "口コミタイトル", max_length=255, null=True, blank=True
     )
     review_language = models.CharField("言語", max_length=50, null=True, blank=True)
-    review_comment = models.TextField("口コミ本文", null=True, blank=True)
+    review_comment = models.TextField("オリジナルの口コミ本文", null=True, blank=True)
+    translated_review_comment = models.TextField("翻訳した口コミ本文", null=True, blank=True)
     location_comment = models.TextField("立地に関するコメント", null=True, blank=True)
     service_comment = models.TextField(
         "サービスに関するコメント", null=True, blank=True
