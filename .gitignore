@@ -21,18 +21,25 @@ __pycache__/
 *.pyd
 
 
-### Node.js / Next.js ###
-# 依存パッケージ
-frontend/node_modules/
-
-# Next.jsのビルドキャッシュと成果物
+# ===================================================================
+# Next.js (in /frontend directory)
+# ===================================================================
 frontend/.next/
 frontend/out/
 
-# 環境変数ファイル (フロントエンド用)
+# Local Environment Variables
 frontend/.env.local
 frontend/.env.development.local
+frontend/.env.test.local
 frontend/.env.production.local
+
+
+# Auto-generated TS file
+frontend/next-env.d.ts
+
+### Node.js / Next.js ###
+# 依存パッケージ
+frontend/node_modules/
 
 # ビルド/配布用ディレクトリ
 /frontend/build/
@@ -44,7 +51,6 @@ dist/
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
-
 
 ### OS / Editor ###
 # VSCodeの設定
