@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import axios from 'axios'; 
+import axios from 'axios';
 import {
   Search,
   Hotel,
@@ -16,19 +16,9 @@ import {
 interface ApiHotel {
   id: number;
   hotel_name: string;
-  ota_name: string; 
+  ota_name: string;
   crawl_url: string;
 }
-
-// ホテルのダミーデータ
-const allHotels = [
-  { id: 1, name: '帝国ホテル 東京', location: '東京都千代田区' },
-  { id: 2, name: 'ザ・リッツ・カールトン東京', location: '東京都港区' },
-  { id: 3, name: 'ホテルニューオータニ', location: '東京都千代田区' },
-  { id: 4, name: 'マンダリン オリエンタル 東京', location: '東京都中央区' },
-  { id: 5, name: 'コンラッド大阪', location: '大阪府大阪市' },
-  { id: 6, name: 'ザ・リッツ・カールトン京都', location: '京都府京都市' },
-];
 
 // OTAの定義
 const otas = [
@@ -36,6 +26,8 @@ const otas = [
   { id: 'agoda', name: 'agoda' },
   { id: 'rakuten', name: '楽天トラベル' },
 ];
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 export default function CrawlerAdminPage() {
   const [allHotels, setAllHotels] = useState<ApiHotel[]>([]);
@@ -47,23 +39,24 @@ export default function CrawlerAdminPage() {
 
   // New states for options
   const [specifyDate, setSpecifyDate] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
     expedia: true,
     agoda: true,
     rakuten: false,
   });
   const [isExporting, setIsExporting] = useState(false);
-  // --- Effects and Handlers ---
 
   useEffect(() => {
     const fetchHotels = async () => {
       try {
-    
-        const response = await axios.get<ApiHotel[]>(
-          'http://localhost:8000/api/hotels/'
-        );
+        const response = await axios.get<ApiHotel[]>(`${API_URL}/hotels/`);
 
-        setAllHotels(response.data);
+        const data = response.data;
+        setAllHotels(data);
+        setSearchResults(data);
       } catch (error) {
         console.error('Failed to fetch hotels:', error);
       }
@@ -73,22 +66,21 @@ export default function CrawlerAdminPage() {
   }, []);
 
   useEffect(() => {
-    if (searchTerm.length > 0 && !selectedHotel) {
-      // APIから取得した`allHotels`をフィルタリングする
-      const filtered = allHotels.filter((hotel) =>
-        hotel.hotel_name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setSearchResults(filtered);
-    } else {
+    if (selectedHotel) {
       setSearchResults([]);
+      return;
     }
+
+    const filteredResults = allHotels.filter((hotel) =>
+      hotel.hotel_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setSearchResults(filteredResults);
   }, [searchTerm, selectedHotel, allHotels]);
 
- const handleSelectHotel = (hotel: ApiHotel) => {
-   setSelectedHotel(hotel);
-   setSearchTerm(hotel.hotel_name); 
-   setSearchResults([]);
- };
+  const handleSelectHotel = (hotel: ApiHotel) => {
+    setSelectedHotel(hotel);
+    setSearchTerm(hotel.hotel_name);
+  };
 
   const handleClearSelection = () => {
     setSelectedHotel(null);
@@ -106,34 +98,61 @@ export default function CrawlerAdminPage() {
     }
     setIsLoading(true);
 
-    const crawlerParams = {
-      hotel: selectedHotel,
+    const payload = {
+      hotel: { id: selectedHotel.id },
       options: {
-        specifyDate,
-        // startDate, endDate も実際にはstateで管理して渡す
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+        specifyDate: specifyDate,
+        startDate: specifyDate ? startDate : null,
+        endDate: specifyDate ? endDate : null,
       },
     };
-    console.log('クローラー実行:', crawlerParams);
 
-    // Django API endpoint call here...
+    try {
+      // 作成したAPIエンドポイントにPOSTリクエストを送信
+      const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
 
-    setTimeout(() => {
+      alert(
+        response.data.message ||
+          `${selectedHotel.hotel_name} のクローリングを開始しました！`
+      );
+    } catch (error: any) {
+      console.error('クローラーの起動に失敗しました:', error);
+      const errorMessage =
+        error.response && error.response.data && error.response.data.error
+          ? error.response.data.error
+          : 'サーバーとの通信中にエラーが発生しました。';
+      alert(`エラー: ${errorMessage}`);
+    } finally {
       setIsLoading(false);
-      alert(`${selectedHotel.hotel_name} のクローリングを開始しました！`);
-    }, 2000);
+    }
   };
 
   const handleExportFile = async () => {
     if (!selectedHotel) return;
     setIsExporting(true);
-    console.log('ファイル出力:', { hotel: selectedHotel });
-    // Django API for exporting file...
-    setTimeout(() => {
+
+    const payload = {
+      hotel: { id: selectedHotel.id },
+      options: {
+        otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+        specifyDate: specifyDate,
+        startDate: specifyDate ? startDate : null,
+        endDate: specifyDate ? endDate : null,
+      },
+    };
+    try {
+      const response = await axios.post(
+        'http://localhost:8000/api/export/',
+        payload
+      );
+      alert(response.data.message);
+    } catch (error) {
+    } finally {
       setIsExporting(false);
-      alert(`${selectedHotel.hotel_name} のデータファイルを出力しました！`);
-    }, 1500);
+    }
   };
+
   const isActionInProgress = isLoading || isExporting;
   const isButtonDisabled = !selectedHotel || isLoading;
 
@@ -231,20 +250,20 @@ export default function CrawlerAdminPage() {
             >
               <div className='grid sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg'>
                 <div>
-                  <label className='block text-sm font-medium text-slate-600 mb-1'>
-                    開始日
-                  </label>
+                  <label className='block text-sm ...'>開始日</label>
                   <input
                     type='date'
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
                     className='form-input w-full rounded-md border-slate-300'
                   />
                 </div>
                 <div>
-                  <label className='block text-sm font-medium text-slate-600 mb-1'>
-                    終了日
-                  </label>
+                  <label className='block text-sm ...'>終了日</label>
                   <input
                     type='date'
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
                     className='form-input w-full rounded-md border-slate-300'
                   />
                 </div>
