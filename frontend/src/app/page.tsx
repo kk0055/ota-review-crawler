@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import axios from 'axios'; 
 import {
   Search,
   Hotel,
@@ -9,7 +10,15 @@ import {
   Bot,
   Loader2,
   X,
+  FileDown,
 } from 'lucide-react';
+
+interface ApiHotel {
+  id: number;
+  hotel_name: string;
+  ota_name: string; 
+  crawl_url: string;
+}
 
 // ホテルのダミーデータ
 const allHotels = [
@@ -29,12 +38,10 @@ const otas = [
 ];
 
 export default function CrawlerAdminPage() {
-  // --- State Hooks ---
+  const [allHotels, setAllHotels] = useState<ApiHotel[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<typeof allHotels>([]);
-  const [selectedHotel, setSelectedHotel] = useState<
-    (typeof allHotels)[0] | null
-  >(null);
+  const [searchResults, setSearchResults] = useState<ApiHotel[]>([]);
+  const [selectedHotel, setSelectedHotel] = useState<ApiHotel | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,24 +52,43 @@ export default function CrawlerAdminPage() {
     agoda: true,
     rakuten: false,
   });
-
+  const [isExporting, setIsExporting] = useState(false);
   // --- Effects and Handlers ---
+
+  useEffect(() => {
+    const fetchHotels = async () => {
+      try {
+    
+        const response = await axios.get<ApiHotel[]>(
+          'http://localhost:8000/api/hotels/'
+        );
+
+        setAllHotels(response.data);
+      } catch (error) {
+        console.error('Failed to fetch hotels:', error);
+      }
+    };
+
+    fetchHotels();
+  }, []);
+
   useEffect(() => {
     if (searchTerm.length > 0 && !selectedHotel) {
+      // APIから取得した`allHotels`をフィルタリングする
       const filtered = allHotels.filter((hotel) =>
-        hotel.name.toLowerCase().includes(searchTerm.toLowerCase())
+        hotel.hotel_name.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setSearchResults(filtered);
     } else {
       setSearchResults([]);
     }
-  }, [searchTerm, selectedHotel]);
+  }, [searchTerm, selectedHotel, allHotels]);
 
-  const handleSelectHotel = (hotel: (typeof allHotels)[0]) => {
-    setSelectedHotel(hotel);
-    setSearchTerm(hotel.name);
-    setSearchResults([]);
-  };
+ const handleSelectHotel = (hotel: ApiHotel) => {
+   setSelectedHotel(hotel);
+   setSearchTerm(hotel.hotel_name); 
+   setSearchResults([]);
+ };
 
   const handleClearSelection = () => {
     setSelectedHotel(null);
@@ -94,10 +120,21 @@ export default function CrawlerAdminPage() {
 
     setTimeout(() => {
       setIsLoading(false);
-      alert(`${selectedHotel.name} のクローリングを開始しました！`);
+      alert(`${selectedHotel.hotel_name} のクローリングを開始しました！`);
     }, 2000);
   };
 
+  const handleExportFile = async () => {
+    if (!selectedHotel) return;
+    setIsExporting(true);
+    console.log('ファイル出力:', { hotel: selectedHotel });
+    // Django API for exporting file...
+    setTimeout(() => {
+      setIsExporting(false);
+      alert(`${selectedHotel.hotel_name} のデータファイルを出力しました！`);
+    }, 1500);
+  };
+  const isActionInProgress = isLoading || isExporting;
   const isButtonDisabled = !selectedHotel || isLoading;
 
   // --- Render ---
@@ -151,8 +188,7 @@ export default function CrawlerAdminPage() {
                       onClick={() => handleSelectHotel(hotel)}
                       className='px-4 py-3 cursor-pointer hover:bg-indigo-50 transition-colors'
                     >
-                      <p className='font-semibold'>{hotel.name}</p>
-                      <p className='text-sm text-slate-500'>{hotel.location}</p>
+                      <p className='font-semibold'>{hotel.hotel_name}</p>
                     </li>
                   ))}
                 </ul>
@@ -245,15 +281,48 @@ export default function CrawlerAdminPage() {
         </div>
 
         {/* --- 実行ボタン --- */}
-        <div className='mt-8 flex justify-end'>
+        <div className='mt-8 flex flex-col sm:flex-row justify-end items-center gap-4'>
+          {/* Secondary Action: Export File */}
+          <button
+            onClick={handleExportFile}
+            disabled={isButtonDisabled}
+            className={`
+              flex items-center justify-center w-full sm:w-auto font-bold py-3 px-8 rounded-full
+              transition-all duration-300 ease-in-out
+              bg-white border-2 
+              ${
+                isButtonDisabled
+                  ? 'border-slate-300 text-slate-400 cursor-not-allowed'
+                  : 'border-indigo-600 text-indigo-600 hover:bg-indigo-50 transform hover:scale-105'
+              }
+            `}
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className='animate-spin -ml-1 mr-3 h-5 w-5' />
+                出力中...
+              </>
+            ) : (
+              <>
+                <FileDown className='w-5 h-5 mr-2' />
+                ファイル出力のみ
+              </>
+            )}
+          </button>
+
+          {/* Primary Action: Run Crawler */}
           <button
             onClick={handleRunCrawler}
             disabled={isButtonDisabled}
-            className={`flex items-center justify-center font-bold py-3 px-8 rounded-full text-white transition-all duration-300 ease-in-out transform hover:scale-105 ${
-              isButtonDisabled
-                ? 'bg-slate-400 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl'
-            }`}
+            className={`
+              flex items-center justify-center w-full sm:w-auto font-bold py-3 px-8 rounded-full text-white 
+              transition-all duration-300 ease-in-out
+              ${
+                isButtonDisabled
+                  ? 'bg-slate-400 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl transform hover:scale-105'
+              }
+            `}
           >
             {isLoading ? (
               <>
