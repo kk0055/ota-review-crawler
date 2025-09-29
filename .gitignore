@@ -12,6 +12,8 @@ backend/*.pyc
 # 環境変数ファイル (バックエンド用)
 backend/.env
 
+backend/output
+
 # Pythonキャッシュファイル
 __pycache__/
 *.pyc

@@ -83,9 +83,6 @@ class Review(models.Model):
     """各OTAサイトから収集した詳細な口コミ情報を格納するモデル"""
 
     # --- 関連情報 ---
-    ota = models.ForeignKey(
-        Ota, verbose_name="OTAサイト", on_delete=models.CASCADE, related_name="reviews"
-    )
     hotel = models.ForeignKey(
         Hotel, verbose_name="ホテル", on_delete=models.CASCADE, related_name="reviews"
     )
