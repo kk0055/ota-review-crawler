@@ -12,6 +12,9 @@ import {
   X,
   FileDown,
 } from 'lucide-react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import useTaskPoller from '@/hooks/useTaskPoller';
 
 interface ApiHotel {
   id: number;
@@ -26,7 +29,6 @@ const otas = [
   { id: 'agoda', name: 'agoda' },
   { id: 'rakuten', name: '楽天トラベル' },
 ];
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 export default function CrawlerAdminPage() {
@@ -48,6 +50,7 @@ export default function CrawlerAdminPage() {
     rakuten: false,
   });
   const [isExporting, setIsExporting] = useState(false);
+  const { pollTaskStatus } = useTaskPoller();
 
   useEffect(() => {
     const fetchHotels = async () => {
@@ -111,7 +114,13 @@ export default function CrawlerAdminPage() {
     try {
       // 作成したAPIエンドポイントにPOSTリクエストを送信
       const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
+      const { message, task_id } = response.data;
 
+      toast.info(message); // 「処理を開始しました」
+      if (task_id) {
+        // インポートした関数を呼び出す
+        pollTaskStatus(task_id);
+      }
       alert(
         response.data.message ||
           `${selectedHotel.hotel_name} のクローリングを開始しました！`
@@ -146,7 +155,12 @@ export default function CrawlerAdminPage() {
         'http://localhost:8000/api/export/',
         payload
       );
-      alert(response.data.message);
+        const { message, task_id } = response.data;
+
+      toast.info(message);
+      if (task_id) {
+        pollTaskStatus(task_id);
+      }
     } catch (error) {
     } finally {
       setIsExporting(false);

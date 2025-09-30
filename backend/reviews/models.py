@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils import timezone
 import hashlib
+import uuid
+
 
 # -----------------------------------------------------------------------------
 # 1. OTAモデル: OTAサイトのマスター情報を管理
@@ -38,7 +40,31 @@ class Ota(models.Model):
 # -----------------------------------------------------------------------------
 class Hotel(models.Model):
     """クロール対象となるホテル情報をOTAサイトごとに格納するモデル"""
+    class CrawlStatus(models.TextChoices):
+        PENDING = "PENDING", "処理中"
+        SUCCESS = "SUCCESS", "成功"
+        FAILURE = "FAILURE", "失敗"
+        NEVER_RUN = "NEVER_RUN", "未実行"  
 
+    last_crawl_status = models.CharField(
+        "最終クロールステータス",
+        max_length=10,
+        choices=CrawlStatus.choices,
+        default=CrawlStatus.NEVER_RUN,  # デフォルト値を設定
+        help_text="このOTAのホテルの最終クロール結果",
+    )
+    last_crawled_at = models.DateTimeField(
+        "最終クロール日時",
+        null=True,
+        blank=True,
+        help_text="最後にクロール処理が実行された日時",
+    )
+    last_crawl_message = models.TextField(
+        "最終クロール結果メッセージ",
+        blank=True,
+        null=True,
+        help_text="成功メッセージやエラー詳細を格納",
+    )
     ota = models.ForeignKey(
         Ota, verbose_name="OTAサイト", on_delete=models.CASCADE, related_name="hotels"
     )
@@ -193,3 +219,5 @@ class Review(models.Model):
         # 識別しやすいようにIDまたはハッシュの先頭を表示
         display_id = self.review_id_in_ota or f"hash:{self.review_hash[:7]}"
         return f"Review ({display_id}) for {self.hotel.hotel_name}"
+
+
