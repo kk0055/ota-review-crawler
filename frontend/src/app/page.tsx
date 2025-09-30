@@ -151,6 +151,7 @@ export default function CrawlerAdminPage() {
         responseType: 'blob',
       });
       const contentDisposition = response.headers['content-disposition'];
+      console.log('取得した content-disposition の値:', contentDisposition);
       let filename = 'export.xlsx';
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(
@@ -183,11 +184,10 @@ export default function CrawlerAdminPage() {
         console.error('エクスポート処理中にエラーが発生しました。');
       }
     } finally {
-      setIsLoading(false);
+      setIsExporting(false);
     }
   };
 
-  const isActionInProgress = isLoading || isExporting;
   const isButtonDisabled = !selectedHotel || isLoading;
 
   // --- Render ---

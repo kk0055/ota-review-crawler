@@ -152,7 +152,6 @@ class ExportExcelAPIView(APIView):
                 start_date=start_date,
                 end_date=end_date,
             )
-            print(f"--- [View] Service returned object of type: {type(df)} ---")
             if df.empty:
                 return Response(
                     {"message": "エクスポート対象のデータがありませんでした。"},
