@@ -114,12 +114,12 @@ export default function CrawlerAdminPage() {
     try {
       // 作成したAPIエンドポイントにPOSTリクエストを送信
       const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
-      const { message, task_id } = response.data;
+      const { message } = response.data;
 
       toast.info(message); // 「処理を開始しました」
-      if (task_id) {
+      if (message) {
         // インポートした関数を呼び出す
-        pollTaskStatus(task_id);
+        pollTaskStatus(message);
       }
       alert(
         response.data.message ||
@@ -155,7 +155,7 @@ export default function CrawlerAdminPage() {
         'http://localhost:8000/api/export/',
         payload
       );
-        const { message, task_id } = response.data;
+        const { message } = response.data;
 
       toast.info(message);
       if (task_id) {

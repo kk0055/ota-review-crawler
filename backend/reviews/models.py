@@ -36,10 +36,12 @@ class Ota(models.Model):
 
 
 # -----------------------------------------------------------------------------
-# 2. Hotelモデル: クロール対象となるホテルの情報を管理
+# 2. CrawlTargetモデル: クロール対象となるホテルの情報を管理
 # -----------------------------------------------------------------------------
-class Hotel(models.Model):
-    """クロール対象となるホテル情報をOTAサイトごとに格納するモデル"""
+class CrawlTarget(models.Model):
+    """
+    OTAサイト上の、クロール対象となる個別のホテル掲載情報を管理するモデル。
+    """
     class CrawlStatus(models.TextChoices):
         PENDING = "PENDING", "処理中"
         SUCCESS = "SUCCESS", "成功"
@@ -110,7 +112,10 @@ class Review(models.Model):
 
     # --- 関連情報 ---
     hotel = models.ForeignKey(
-        Hotel, verbose_name="ホテル", on_delete=models.CASCADE, related_name="reviews"
+        CrawlTarget,
+        verbose_name="ホテル",
+        on_delete=models.CASCADE,
+        related_name="reviews",
     )
     review_id_in_ota = models.CharField(
         "OTA内の口コミID", max_length=50, null=True, blank=True,
@@ -219,5 +224,3 @@ class Review(models.Model):
         # 識別しやすいようにIDまたはハッシュの先頭を表示
         display_id = self.review_id_in_ota or f"hash:{self.review_hash[:7]}"
         return f"Review ({display_id}) for {self.hotel.hotel_name}"
-
-

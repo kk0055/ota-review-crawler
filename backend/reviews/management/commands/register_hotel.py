@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from reviews.models import Ota, Hotel  
+from reviews.models import Ota, CrawlTarget
 
 
 class Command(BaseCommand):
@@ -32,7 +32,7 @@ class Command(BaseCommand):
             )
 
         # OTAとホテルIDの組み合わせでホテルを検索または作成
-        hotel, created = Hotel.objects.get_or_create(
+        hotel, created = CrawlTarget.objects.get_or_create(
             ota=ota,
             hotel_id_in_ota=hotel_id,
             defaults={

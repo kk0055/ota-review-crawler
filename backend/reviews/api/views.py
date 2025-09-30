@@ -1,6 +1,6 @@
 from rest_framework.generics import ListAPIView
-from ..models import Hotel
-from .serializers import HotelSerializer
+from ..models import CrawlTarget
+from .serializers import HotelSerializer, CrawlTargetStatusSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -16,7 +16,7 @@ class HotelListAPIView(ListAPIView):
     /api/hotels/ でアクセスできるようにする
     """
 
-    queryset = Hotel.objects.select_related("ota").all()
+    queryset = CrawlTarget.objects.select_related("ota").all()
     serializer_class = HotelSerializer
 
 
@@ -57,7 +57,7 @@ class BaseCrawlerActionView(APIView):
 
         try:
             # フロントからはIDでホテルが来るので、そこから名前を取得する
-            base_hotel = Hotel.objects.get(pk=selected_hotel_id)
+            base_hotel = CrawlTarget.objects.get(pk=selected_hotel_id)
             hotel_name = base_hotel.hotel_name
 
             # コマンドに渡す引数を準備
@@ -79,7 +79,7 @@ class BaseCrawlerActionView(APIView):
 
             return Response({"message": message}, status=status.HTTP_202_ACCEPTED)
 
-        except Hotel.DoesNotExist:
+        except CrawlTarget.DoesNotExist:
             return Response(
                 {"error": "指定されたホテルが見つかりません。"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -98,3 +98,10 @@ class StartCrawlerAPIView(BaseCrawlerActionView):
 
 class ExportFileAPIView(BaseCrawlerActionView):
     export_only = True
+
+
+class CrawlStatusAPIView(APIView):
+    def get(self, request, hotel_name):
+        targets = CrawlTarget.objects.filter(hotel_name=hotel_name)
+        serializer = CrawlTargetStatusSerializer(targets, many=True)
+        return Response(serializer.data)

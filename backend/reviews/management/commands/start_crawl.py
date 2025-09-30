@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from reviews.models import Hotel, Review, Ota
+from reviews.models import CrawlTarget, Review, Ota
 from reviews.crawlers.expedia_crawler import (
     scrape_expedia_reviews,
 )
@@ -8,6 +8,7 @@ from datetime import datetime
 import re
 import hashlib
 import pandas as pd
+from django.utils import timezone
 
 EXCEL_HEADER_MAP = {
     "ホテルID": "hotel_id",
@@ -26,6 +27,7 @@ EXCEL_HEADER_MAP = {
     "口コミ(翻訳済)": "translated_review_comment",
 }
 
+
 class Command(BaseCommand):
     help = "指定されたホテルの口コミ情報をクロールしてDBに保存します。"
     # python manage.py start_crawl "ノボテル奈良"
@@ -39,9 +41,9 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--otas",
-            nargs='+', # 1つ以上のOTA名をリストで受け取る
-            default=None, # 指定がない場合はNone
-            help="クロール対象のOTA名のリスト (例: Expedia agoda)。指定がない場合は登録されている全OTAが対象。"
+            nargs="+",  # 1つ以上のOTA名をリストで受け取る
+            default=None,  # 指定がない場合はNone
+            help="クロール対象のOTA名のリスト (例: Expedia agoda)。指定がない場合は登録されている全OTAが対象。",
         )
         parser.add_argument(
             "--start-date",
@@ -57,8 +59,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--no-excel-export",
-            action="store_false", 
-            dest="export_excel", 
+            action="store_false",
+            dest="export_excel",
             default=True,  # デフォルトでは True (Excel出力を行う)
             help="処理後のExcelファイルへの口コミ出力を行わないようにします (デフォルトは出力する)。",
         )
@@ -77,73 +79,134 @@ class Command(BaseCommand):
         export_only = options["export_only"]
 
         # DBから対象ホテル情報を取得
-        hotels_to_process = Hotel.objects.filter(
+        crawl_targets = CrawlTarget.objects.filter(
             hotel_name=hotel_name
         ).select_related("ota")
-        
+
         if otas:
-            hotels_to_process = hotels_to_process.filter(ota__name__in=otas)
+            crawl_targets = crawl_targets.filter(ota__name__in=otas)
 
-        if not hotels_to_process.exists():
+        if not crawl_targets.exists():
             ota_filter_msg = f" (OTA: {', '.join(otas)})" if otas else ""
-            raise CommandError(f"ホテル '{hotel_name}'{ota_filter_msg} はDBに登録されていません。")
+            raise CommandError(
+                f"ホテル '{hotel_name}'{ota_filter_msg} はDBに登録されていません。"
+            )
 
-
-        self.stdout.write(self.style.SUCCESS(f"--- 処理開始: {hotel_name} ({hotels_to_process.count()}件のOTAが対象) ---"))
-
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"--- 処理開始: {hotel_name} ({crawl_targets.count()}件のOTAが対象) ---"
+            )
+        )
 
         # --- 3. OTAごとのループ処理 ---
-        for hotel in hotels_to_process:
-            self.stdout.write(f"\n▶ 処理中: {hotel.ota.name} (Hotel ID: {hotel.id})")
+        for target in crawl_targets:
+            self.stdout.write(f"\n▶ 処理中: {target.ota.name} (Hotel ID: {target.id})")
+            target.last_crawl_status = CrawlTarget.CrawlStatus.PENDING
+            target.save()
+            error_message = None
 
-            if not hotel.crawl_url and not export_only:
-                self.stdout.write(self.style.WARNING("  クロールURLが未設定のため、クロール処理をスキップします。"))
+            if not target.crawl_url and not export_only:
+                self.stdout.write(
+                    self.style.WARNING(
+                        "  クロールURLが未設定のため、クロール処理をスキップします。"
+                    )
+                )
+                target.last_crawl_status = CrawlTarget.CrawlStatus.SUCCESS
+                target.last_crawl_message = (
+                    "クロールURLが未設定のため、スキップしました。"
+                )
+                target.last_crawled_at = timezone.now()
+                target.save()
                 continue
 
             # --- 4. クロール & DB保存処理 ---
             if not export_only:
                 reviews_list = []
-                if not hotel.crawl_url:
-                    self.stdout.write(self.style.WARNING("  クロールURLが未設定のため、クロール処理をスキップします。"))
+                if not target.crawl_url:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "  クロールURLが未設定のため、クロール処理をスキップします。"
+                        )
+                    )
                     # Excel出力処理に進むため、continueはしない
                 else:
                     try:
                         # OTAによって担当クローラーを切り替える
-                        if hotel.ota.name == "Expedia":
-                            reviews_list = scrape_expedia_reviews(hotel.crawl_url, start_date_str=start_date, end_date_str=end_date)
-                        elif hotel.ota.name == "agoda":
-                            # reviews_list = fetch_agoda_reviews(hotel.crawl_url, start_date_str=start_date, end_date_str=end_date)
-                            print('Skip')
+                        if target.ota.name == "Expedia":
+                            reviews_list = scrape_expedia_reviews(
+                                target.crawl_url,
+                                start_date_str=start_date,
+                                end_date_str=end_date,
+                            )
+                        elif target.ota.name == "agoda":
+                            # reviews_list = fetch_agoda_reviews(target.crawl_url, start_date_str=start_date, end_date_str=end_date)
+                            print("Skip")
                         else:
-                            self.stdout.write(self.style.WARNING(f"  '{hotel.ota.name}' に対応するクローラーがありません。"))
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"  '{target.ota.name}' に対応するクローラーがありません。"
+                                )
+                            )
 
                     except Exception as e:
                         # 例外をキャッチし、エラーメッセージを表示して処理を続行する
-                        self.stderr.write(self.style.ERROR(f"  [エラー] {hotel.ota.name}のクロール中にエラーが発生しました: {e}"))
-                        self.stderr.write(self.style.ERROR(f"  {hotel.ota.name}の処理を中断し、次のOTAに進みます。"))
-                
+                        self.stderr.write(
+                            self.style.ERROR(
+                                f"  [エラー] {target.ota.name}のクロール中にエラーが発生しました: {e}"
+                            )
+                        )
+                        self.stderr.write(
+                            self.style.ERROR(
+                                f"  {target.ota.name}の処理を中断し、次のOTAに進みます。"
+                            )
+                        )
+                        error_message = f"クロール中にエラーが発生しました: {e}"
 
                 # DB保存ロジック
-                if reviews_list:
-                    self.save_reviews_to_db(reviews_list, hotel)
-                else:
-                    self.stdout.write("  口コミは取得されませんでした。")
+                if not error_message:
+                    if reviews_list:
+                        self.save_reviews_to_db(reviews_list, target)
+                    else:
+                        self.stdout.write("  口コミは取得されませんでした。")
             else:
-                self.stdout.write("  クローリングはスキップされました (--export-only)。")
+                self.stdout.write(
+                    "  クローリングはスキップされました (--export-only)。"
+                )
+            if error_message:
+                # エラーメッセージがあれば「失敗」に設定
+                target.last_crawl_status = CrawlTarget.CrawlStatus.FAILURE
+                target.last_crawl_message = error_message
+            else:
+                # エラーがなければ「成功」に設定
+                target.last_crawl_status = CrawlTarget.CrawlStatus.SUCCESS
+                # 成功メッセージも任意で設定可能
+                message = f"正常に処理完了。取得件数: {len(reviews_list) if 'reviews_list' in locals() else 0}"
+                if not export_only and not target.crawl_url:
+                    message = "クロールURLが未設定のため、スキップしました。"
+                target.last_crawl_message = message
+
+            target.last_crawled_at = timezone.now()
+            target.save()
 
             # --- 5. Excel出力処理 ---
             if should_export_excel:
-                self.export_reviews_to_excel(hotel)
+                self.export_reviews_to_excel(target)
             else:
-                self.stdout.write("  Excel出力はスキップされました (--no-excel-export)。")
+                self.stdout.write(
+                    "  Excel出力はスキップされました (--no-excel-export)。"
+                )
 
-        self.stdout.write(self.style.SUCCESS(f"\n--- '{hotel_name}' に関する全ての処理が完了しました ---"))
-
-
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\n--- '{hotel_name}' に関する全ての処理が完了しました ---"
+            )
+        )
 
     def save_reviews_to_db(self, reviews_list, hotel):
         """取得したレビューのリストをデータベースに保存/更新します。"""
-        self.stdout.write(f"  取得した {len(reviews_list)} 件の口コミをDBに保存します...")
+        self.stdout.write(
+            f"  取得した {len(reviews_list)} 件の口コミをDBに保存します..."
+        )
         saved_count, updated_count, skipped_count = 0, 0, 0
 
         for review_data in reviews_list:
@@ -157,23 +220,35 @@ class Command(BaseCommand):
                     review_hash=review_hash,
                     defaults={
                         "hotel": hotel,
-                        "overall_score": int(review_data["overall_score"]) if review_data.get("overall_score", "").isdigit() else None,
+                        "overall_score": (
+                            int(review_data["overall_score"])
+                            if review_data.get("overall_score", "").isdigit()
+                            else None
+                        ),
                         "reviewer_name": review_data.get("reviewer_name"),
                         "review_date": review_data.get("review_date"),
                         "traveler_type": review_data.get("traveler_type"),
                         "review_comment": review_data.get("review_comment"),
-                        "translated_review_comment": review_data.get("translated_review_comment"),
+                        "translated_review_comment": review_data.get(
+                            "translated_review_comment"
+                        ),
                     },
                 )
-                if created: saved_count += 1
-                else: updated_count += 1
+                if created:
+                    saved_count += 1
+                else:
+                    updated_count += 1
             except Exception as e:
-                self.stdout.write(self.style.WARNING(f"    DB保存エラー: {e} スキップします. データ: {review_data}"))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"    DB保存エラー: {e} スキップします. データ: {review_data}"
+                    )
+                )
                 skipped_count += 1
-        
-        self.stdout.write(f"  [DB保存結果] 新規: {saved_count}件, 更新: {updated_count}件, スキップ: {skipped_count}件")
 
-
+        self.stdout.write(
+            f"  [DB保存結果] 新規: {saved_count}件, 更新: {updated_count}件, スキップ: {skipped_count}件"
+        )
 
     def export_reviews_to_excel(self, hotel):
         """指定されたホテルのレビューをDBから取得し、Excelファイルに出力します。"""
