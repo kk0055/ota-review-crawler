@@ -19,7 +19,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     # Chromeオプションの設定
     chrome_options = Options()
     chrome_options.add_argument("--lang=ja-JP")
-    # chrome_options.add_argument('--headless=new')
+    chrome_options.add_argument('--headless=new')
 
     # WebDriver Managerを使って、Chromeのバージョンに合ったWebDriverを自動設定
     # service = Service(ChromeDriverManager().install())

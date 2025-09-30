@@ -6,6 +6,16 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.core.management import call_command
 import threading
+from reviews.services import get_reviews_as_dataframe, generate_excel_in_memory
+from django.http import HttpResponse
+import io
+import re
+from datetime import datetime
+from urllib.parse import quote
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
 # -----------------------------------------------------------------------------
 # API Views
@@ -105,3 +115,74 @@ class CrawlStatusAPIView(APIView):
         targets = CrawlTarget.objects.filter(hotel_name=hotel_name)
         serializer = CrawlTargetStatusSerializer(targets, many=True)
         return Response(serializer.data)
+
+
+class ExportExcelAPIView(APIView):
+    """
+    リクエストされたホテルのレビューデータをExcelファイルとして生成し、
+    直接ダウンロードさせるAPIビュー。
+    """
+
+    def post(self, request, *args, **kwargs):
+
+        hotel_data = request.data.get("hotel", {})
+        hotel_name = hotel_data.get("name") 
+
+        options_data = request.data.get("options", {})
+        otas = options_data.get("otas")
+        start_date = options_data.get("startDate")
+        end_date = options_data.get("endDate")
+
+        if not hotel_name:
+            return Response(
+                {"error": "hotel_nameは必須です。"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            if not CrawlTarget.objects.filter(hotel_name=hotel_name).exists():
+                return Response(
+                    {"error": f"ホテル '{hotel_name}' が見つかりません。"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            print(f"--- [View] Calling service with hotel_name: '{hotel_name}', otas: {otas} ---")
+            # --- サービス関数を呼び出す (hotel_name を渡す) ---
+            df = get_reviews_as_dataframe(
+                hotel_name=hotel_name,
+                ota_names=otas,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            print(f"--- [View] Service returned object of type: {type(df)} ---")
+            if df.empty:
+                return Response(
+                    {"message": "エクスポート対象のデータがありませんでした。"},
+                    status=status.HTTP_204_NO_CONTENT,
+                )
+
+            # --- ファイル名生成とレスポンス作成 (ここは前回の回答と同じ) ---
+            safe_hotel_name = re.sub(r'[\\/*?:"<>|]', "_", hotel_name)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_filename = f"{safe_hotel_name}_{timestamp}.xlsx"
+
+            excel_data_buffer = generate_excel_in_memory(df)
+
+            response = HttpResponse(
+                excel_data_buffer,
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = (
+                f"attachment; filename*=UTF-8''{quote(final_filename)}"
+            )
+
+            return response
+
+        except CrawlTarget.DoesNotExist:
+            return Response(
+                {"error": f" {hotel_name} のホテルが見つかりません。"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"サーバー内部でエラーが発生しました: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -13,8 +13,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import useTaskPoller from '@/hooks/useTaskPoller';
+import { useCrawlStatusPoller } from '@/hooks/useCrawlStatusPoller';
 
 interface ApiHotel {
   id: number;
@@ -50,8 +49,14 @@ export default function CrawlerAdminPage() {
     rakuten: false,
   });
   const [isExporting, setIsExporting] = useState(false);
-  const { pollTaskStatus } = useTaskPoller();
 
+  const [pollingHotelName, setPollingHotelName] = useState<string | null>(null);
+
+  const {
+    statusData,
+    isLoading: isPollingLoading,
+    error: pollingError,
+  } = useCrawlStatusPoller({ hotelName: pollingHotelName });
   useEffect(() => {
     const fetchHotels = async () => {
       try {
@@ -100,9 +105,9 @@ export default function CrawlerAdminPage() {
       return;
     }
     setIsLoading(true);
-
+    setPollingHotelName(null);
     const payload = {
-      hotel: { id: selectedHotel.id },
+      hotel: { name: selectedHotel.hotel_name },
       options: {
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
         specifyDate: specifyDate,
@@ -114,17 +119,8 @@ export default function CrawlerAdminPage() {
     try {
       // 作成したAPIエンドポイントにPOSTリクエストを送信
       const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
-      const { message } = response.data;
-
-      toast.info(message); // 「処理を開始しました」
-      if (message) {
-        // インポートした関数を呼び出す
-        pollTaskStatus(message);
-      }
-      alert(
-        response.data.message ||
-          `${selectedHotel.hotel_name} のクローリングを開始しました！`
-      );
+      toast.info(response.data.message || 'クローラーの処理を開始しました。');
+      setPollingHotelName(selectedHotel.hotel_name);
     } catch (error: any) {
       console.error('クローラーの起動に失敗しました:', error);
       const errorMessage =
@@ -142,7 +138,7 @@ export default function CrawlerAdminPage() {
     setIsExporting(true);
 
     const payload = {
-      hotel: { id: selectedHotel.id },
+      hotel: { id: selectedHotel.id, name: selectedHotel.hotel_name },
       options: {
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
         specifyDate: specifyDate,
@@ -151,19 +147,43 @@ export default function CrawlerAdminPage() {
       },
     };
     try {
-      const response = await axios.post(
-        'http://localhost:8000/api/export/',
-        payload
-      );
-        const { message } = response.data;
-
-      toast.info(message);
-      if (task_id) {
-        pollTaskStatus(task_id);
+      const response = await axios.post(`${API_URL}/export/`, payload, {
+        responseType: 'blob',
+      });
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'export.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(
+          /filename\*=UTF-8''(.+)/
+        );
+        if (filenameMatch && filenameMatch.length > 1) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
       }
-    } catch (error) {
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('エクスポートに失敗しました:', err);
+      if (err.response && err.response.data instanceof Blob) {
+        const errorText = await err.response.data.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          console.error(errorJson.error || '不明なエラーが発生しました。');
+        } catch {
+          console.error('サーバーから予期せぬエラーが返されました。');
+        }
+      } else {
+        console.error('エクスポート処理中にエラーが発生しました。');
+      }
     } finally {
-      setIsExporting(false);
+      setIsLoading(false);
     }
   };
 
@@ -370,6 +390,36 @@ export default function CrawlerAdminPage() {
             )}
           </button>
         </div>
+        {pollingHotelName && (
+          <div style={{ marginTop: '20px' }}>
+            <h3>{pollingHotelName} のクロール状況</h3>
+
+            {isPollingLoading && !statusData.length && (
+              <p>ステータスを取得中...</p>
+            )}
+            {pollingError && (
+              <p style={{ color: 'red' }}>ステータスの取得に失敗しました。</p>
+            )}
+
+            {statusData.length > 0 && (
+              <ul>
+                {statusData.map((target) => (
+                  <li key={target.id}>
+                    <strong>{target.ota_name}:</strong>{' '}
+                    {target.last_crawl_status}
+                    {/* ステータスに応じたアイコンを表示すると分かりやすい */}
+                    {target.last_crawl_status === 'PENDING' && ' ⏳'}
+                    {target.last_crawl_status === 'SUCCESS' && ' ✅'}
+                    {target.last_crawl_status === 'FAILURE' && ' ❌'}
+                    <p style={{ fontSize: '0.9em', color: '#666' }}>
+                      {target.last_crawl_message || '...'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

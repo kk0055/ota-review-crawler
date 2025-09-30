@@ -10,7 +10,7 @@ def export_dataframe_to_excel(df: pd.DataFrame, base_filename: str, stdout_write
     :param df: 出力対象のpandas DataFrame
     :param base_filename: 日付/時刻が付加される前のベースとなるファイル名
     :param stdout_writer: Django Commandのインスタンス (self)。
-                          メッセージ出力のために stdout_writer.stdout と stdout_writer.style を使用します。
+    メッセージ出力のために stdout_writer.stdout と stdout_writer.style を使用します。
     """
     try:
         # ファイル名に使用できない文字をクリーニング
