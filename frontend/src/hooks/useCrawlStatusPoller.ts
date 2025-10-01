@@ -26,36 +26,45 @@ interface UseCrawlStatusPollerReturn {
 
 export function useCrawlStatusPoller({
   hotelName,
-  interval = 5000,
 }: UseCrawlStatusPollerProps): UseCrawlStatusPollerReturn {
   const [statusData, setStatusData] = useState<CrawlStatus[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<AxiosError | null>(null);
 
-  const isPollingStopped =
-    statusData.length > 0 &&
-    statusData.every(
-      (target) =>
-        target.last_crawl_status === 'SUCCESS' ||
-        target.last_crawl_status === 'FAILURE'
-    );
-
   useEffect(() => {
+    // hotelNameがなければ何もしない
     if (!hotelName) {
       setIsLoading(false);
       return;
     }
 
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     const fetchData = async () => {
+      // すでにアンマウントされていたら処理を中断
+      if (!isMounted) return;
+
       try {
         const response = await axios.get<CrawlStatus[]>(
           `${API_URL}/crawl-status/${hotelName}/`
         );
 
         if (isMounted) {
-          setStatusData(response.data);
+          const newData = response.data;
+          setStatusData(newData);
+
+          // 最新のデータですべてのクロールが完了しているかチェック
+          const isPollingFinished = newData.every(
+            (target) =>
+              target.last_crawl_status === 'SUCCESS' ||
+              target.last_crawl_status === 'FAILURE'
+          );
+
+          // まだ完了していなければ、10秒後に次のポーリングを予約
+          if (!isPollingFinished) {
+            timeoutId = setTimeout(fetchData, 10000); // 10秒間隔
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -72,20 +81,17 @@ export function useCrawlStatusPoller({
       }
     };
 
-    fetchData();
+    // 最初のポーリングを20秒後に開始
+    timeoutId = setTimeout(fetchData, 20000);
 
-    let intervalId: NodeJS.Timeout | null = null;
-    if (!isPollingStopped) {
-      intervalId = setInterval(fetchData, interval);
-    }
-
+    // クリーンアップ関数
     return () => {
       isMounted = false;
-      if (intervalId) {
-        clearInterval(intervalId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-  }, [hotelName, interval, isPollingStopped]);
+  }, [hotelName]); 
 
   return { statusData, isLoading, error };
 }

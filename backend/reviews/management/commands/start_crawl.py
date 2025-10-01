@@ -85,19 +85,19 @@ class Command(BaseCommand):
             self.stdout.write(f"  結果: {message}")
 
 
-        if should_export_excel:
-            self.stdout.write("\n▶ Excelファイルを作成します...")
+        # if should_export_excel:
+        #     self.stdout.write("\n▶ Excelファイルを作成します...")
 
-            df = get_reviews_as_dataframe(hotel_name, otas)
+        #     df = get_reviews_as_dataframe(hotel_name, otas)
 
-            if df.empty:
-                self.stdout.write(
-                    self.style.WARNING("  Excel出力対象のデータがありません。")
-                )
-            else:
-                # コマンド実行時はディスクにファイルを保存
-                export_dataframe_to_excel(
-                    df=df, base_filename=hotel_name, stdout_writer=self
-                )
+        #     if df.empty:
+        #         self.stdout.write(
+        #             self.style.WARNING("  Excel出力対象のデータがありません。")
+        #         )
+        #     else:
+        #         # コマンド実行時はディスクにファイルを保存
+        #         export_dataframe_to_excel(
+        #             df=df, base_filename=hotel_name, stdout_writer=self
+        #         )
 
-        self.stdout.write(self.style.SUCCESS("\n--- 全ての処理が完了しました ---"))
+        # self.stdout.write(self.style.SUCCESS("\n--- 全ての処理が完了しました ---"))

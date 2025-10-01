@@ -39,8 +39,8 @@ export default function CrawlerAdminPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // New states for options
-  const [specifyDate, setSpecifyDate] = useState(false);
-  const [startDate, setStartDate] = useState('');
+  const [specifyDate, setSpecifyDate] = useState(true);
+  const [startDate, setStartDate] = useState('2025-09-10');
   const [endDate, setEndDate] = useState('');
 
   const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
@@ -107,7 +107,7 @@ export default function CrawlerAdminPage() {
     setIsLoading(true);
     setPollingHotelName(null);
     const payload = {
-      hotel: { name: selectedHotel.hotel_name },
+      hotel: { id: selectedHotel.id, name: selectedHotel.hotel_name },
       options: {
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
         specifyDate: specifyDate,

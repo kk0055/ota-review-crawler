@@ -6,7 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import undetected_chromedriver as uc
 from datetime import datetime, date
-
+import logging
+from selenium import webdriver
 
 def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = None):
     """
@@ -17,16 +18,25 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     end_date_str: 収集終了日 (YYYY-MM-DD形式の文字列)。この日付より新しい口コミはスキップ。
     """
     # Chromeオプションの設定
-    chrome_options = Options()
+    chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--lang=ja-JP")
-    chrome_options.add_argument('--headless=new')
+    # chrome_options.add_argument("--headless")
+
+    # 1. サンドボックスを無効にする (特にコンテナやCI環境で有効)
+    chrome_options.add_argument('--no-sandbox')
+
+    # 2. /dev/shmの使用を無効にする (メモリ不足によるクラッシュを防ぐ)
+    chrome_options.add_argument('--disable-dev-shm-usage')
+
+    # 3. GPUを無効にする (ヘッドレスモードでの描画問題を回避)
+    chrome_options.add_argument('--disable-gpu')
 
     # WebDriver Managerを使って、Chromeのバージョンに合ったWebDriverを自動設定
     # service = Service(ChromeDriverManager().install())
-    # driver = webdriver.Chrome(service=service, options=chrome_options)
+    # driver = webdriver.Chrome(options=chrome_options)
     # ブラウザドライバーのセットアップ
-    driver = uc.Chrome(options=chrome_options)
-
+    driver = uc.Chrome(options=chrome_options, version_main=140)
+    driver.set_window_size(500, 500)
     # 処理が完了するまで最大で待機する時間（秒）
     wait = WebDriverWait(driver, 10)
 
@@ -59,14 +69,17 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
 
         try:
             # "すべて承諾" ボタン (ID: onetrust-accept-btn-handler) が表示されるまで待つ
-            accept_cookies_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
+            accept_cookies_button = wait.until(
+            EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
             )
             print("Cookie同意ポップアップを検知しました。承諾しています...")
             driver.execute_script("arguments[0].click();", accept_cookies_button)
-            time.sleep(1)  # クリック後の画面遷移を待つ
+            print("Cookie同意ポップアップが消えるのを待っています...")
+            wait.until(
+                EC.invisibility_of_element_located((By.ID, "onetrust-group-container"))
+            )
+            print("ポップアップが消えました。")
         except TimeoutException:
-            # 5秒待っても表示されなければ、ポップアップは無いか、すでに同意済みと判断
             print("Cookie同意ポップアップは表示されませんでした。")
 
         # --- 日付選択のポップアップが表示された場合、閉じる ---
@@ -85,14 +98,17 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
             print("日付選択ポップアップは表示されませんでした。")
 
         # 2. "口コミをすべて表示" をクリックしてレビュー表示
-        print("「口コミをすべて表示」ボタンを探しています...")
-        show_reviews_button = wait.until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "button[data-stid='reviews-link']")
+        try:
+            print("「口コミをすべて表示」ボタンを探しています...")
+            show_reviews_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "button[data-stid='reviews-link']")
+                )
             )
-        )
-        print("ボタンをクリックして口コミを表示します。")
-        show_reviews_button.click()
+            print("ボタンをクリックして口コミを表示します。")
+            show_reviews_button.click()
+        except TimeoutException:
+            print("「口コミをすべて表示」ボタンが表示されませんでした。")
 
         # 口コミモーダルが表示され、最初の口コミが読み込まれるまで待機
         print("口コミの読み込みを待っています...")
