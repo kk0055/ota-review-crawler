@@ -5,7 +5,7 @@ from datetime import datetime
 import re
 import hashlib
 import pandas as pd
-from .models import Review, CrawlTarget, Ota
+from .models import Review, CrawlTarget, Ota, Hotel
 from .crawlers.expedia_crawler import scrape_expedia_reviews
 import logging
 
@@ -75,18 +75,23 @@ def get_reviews_as_dataframe(
     指定された条件でDBからレビューを取得し、pandas DataFrameとして返す。
     """
     print(f"--- [Service] Function started. Searching for hotel: '{hotel_name}' ---")
+    try:
+        # 1. まずホテル名で Hotel マスターモデルを取得する
+        hotel_master = Hotel.objects.get(name=hotel_name)
+    except Hotel.DoesNotExist:
+        # マスターが存在しない場合は、空のDataFrameを返す
+        return pd.DataFrame()
 
-    target_hotels = CrawlTarget.objects.filter(hotel_name=hotel_name)
+    targets = CrawlTarget.objects.filter(hotel=hotel_master)
 
     if ota_names:
-        target_hotels = target_hotels.filter(ota__name__in=ota_names)
+        targets = targets.filter(ota__name__in=ota_names)
 
-    # この時点で絞り込み対象のホテルが存在しないなら、早期にリターン
-    if not target_hotels.exists():
+    if not targets.exists():
         print("--- [Service] No target hotels found. Returning empty DataFrame. ---")
         return pd.DataFrame()
 
-    reviews = Review.objects.filter(hotel__in=target_hotels)
+    reviews = Review.objects.filter(crawl_target__in=targets)
 
     # 日付範囲の指定があれば、それでさらにフィルタリング
     if start_date:
@@ -117,7 +122,7 @@ def generate_excel_in_memory(df: pd.DataFrame) -> io.BytesIO:
     return excel_buffer
 
 
-def save_reviews_to_db(reviews_list, hotel):
+def save_reviews_to_db(reviews_list, crawl_target: CrawlTarget):
     """取得したレビューのリストをデータベースに保存/更新します。"""
     logging.info(f"  取得した {len(reviews_list)} 件の口コミをDBに保存します...")
     saved_count, updated_count, skipped_count = 0, 0, 0
@@ -129,7 +134,7 @@ def save_reviews_to_db(reviews_list, hotel):
             # 欠損したり変更されたりする可能性が低い、安定したコア情報のみでハッシュを構成する。
             # これにより、2回目にクロールした際に一部情報が欠損しても、同じレビューとして特定できる。
             source_string = (
-                f"{hotel.id}-"
+                f"{crawl_target.id}-"
                 f"{review_data.get('reviewer_name', '')}-"
                 f"{review_data.get('review_date', '')}-"
                 f"{review_data.get('overall_score', '')}-"
@@ -138,7 +143,7 @@ def save_reviews_to_db(reviews_list, hotel):
             review_hash = hashlib.sha256(source_string.encode("utf-8")).hexdigest()
 
             defaults_to_update = {
-                "hotel": hotel,
+                "crawl_target": crawl_target, # "hotel": hotel から変更
             }
 
             # 各項目をチェックし、有効なデータだけを defaults に追加していく

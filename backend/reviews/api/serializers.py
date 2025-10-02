@@ -1,25 +1,26 @@
 from rest_framework import serializers
-from ..models import CrawlTarget, Ota
+
+from ..models import CrawlTarget, Ota, Hotel
+
 
 class HotelSerializer(serializers.ModelSerializer):
-    """クロール対象のリストを返すためのシリアライザー"""
-
-    # ForeignKey先のOtaモデルの名前を直接取得する
-    ota_name = serializers.CharField(source="ota.name", read_only=True)
+    """ホテルマスターの一覧を返すためのシリアライザー"""
 
     class Meta:
-        model = CrawlTarget
-        # APIで返したいフィールドを指定
-        fields = ["id", "hotel_name", "ota_name", "crawl_url"]
+        model = Hotel
+        fields = ["id", "name"]
 
 
 class CrawlTargetStatusSerializer(serializers.ModelSerializer):
     """特定のクロール対象の実行ステータスを返すためのシリアライザー"""
 
+
     ota_name = serializers.CharField(source="ota.name", read_only=True)
+    hotel_name = serializers.CharField(source="hotel.name", read_only=True)
 
     class Meta:
         model = CrawlTarget
+
         fields = [
             "id",
             "hotel_name",

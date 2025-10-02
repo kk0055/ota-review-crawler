@@ -14,7 +14,7 @@ export interface CrawlStatus {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface UseCrawlStatusPollerProps {
-  hotelName: string | null;
+  hotelId: number | null;
   interval?: number;
 }
 
@@ -25,16 +25,18 @@ interface UseCrawlStatusPollerReturn {
 }
 
 export function useCrawlStatusPoller({
-  hotelName,
+  hotelId,
 }: UseCrawlStatusPollerProps): UseCrawlStatusPollerReturn {
   const [statusData, setStatusData] = useState<CrawlStatus[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxiosError | null>(null);
 
   useEffect(() => {
-    // hotelNameがなければ何もしない
-    if (!hotelName) {
+    // hotelIdがなければ何もしない（状態をリセット）
+    if (!hotelId) {
+      setStatusData([]);
       setIsLoading(false);
+      setError(null);
       return;
     }
 
@@ -47,12 +49,13 @@ export function useCrawlStatusPoller({
 
       try {
         const response = await axios.get<CrawlStatus[]>(
-          `${API_URL}/crawl-status/${hotelName}/`
+          `${API_URL}/crawl-status/${hotelId}/`
         );
 
         if (isMounted) {
           const newData = response.data;
           setStatusData(newData);
+          setError(null);
 
           // 最新のデータですべてのクロールが完了しているかチェック
           const isPollingFinished = newData.every(
@@ -61,8 +64,9 @@ export function useCrawlStatusPoller({
               target.last_crawl_status === 'FAILURE'
           );
 
-          // まだ完了していなければ、10秒後に次のポーリングを予約
-          if (!isPollingFinished) {
+          if (isPollingFinished) {
+            setIsLoading(false);
+          } else {
             timeoutId = setTimeout(fetchData, 10000); // 10秒間隔
           }
         }
@@ -73,14 +77,11 @@ export function useCrawlStatusPoller({
           } else {
             setError(new AxiosError('An unexpected error occurred'));
           }
-        }
-      } finally {
-        if (isMounted) {
           setIsLoading(false);
         }
       }
     };
-
+    setIsLoading(true);
     // 最初のポーリングを20秒後に開始
     timeoutId = setTimeout(fetchData, 20000);
 
@@ -91,7 +92,7 @@ export function useCrawlStatusPoller({
         clearTimeout(timeoutId);
       }
     };
-  }, [hotelName]); 
+  }, [hotelId]);
 
   return { statusData, isLoading, error };
 }

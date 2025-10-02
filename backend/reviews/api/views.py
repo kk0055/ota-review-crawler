@@ -1,5 +1,5 @@
 from rest_framework.generics import ListAPIView
-from ..models import CrawlTarget
+from ..models import CrawlTarget, Hotel
 from .serializers import HotelSerializer, CrawlTargetStatusSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,7 +26,7 @@ class HotelListAPIView(ListAPIView):
     /api/hotels/ でアクセスできるようにする
     """
 
-    queryset = CrawlTarget.objects.select_related("ota").all()
+    queryset = Hotel.objects.all().order_by("name")
     serializer_class = HotelSerializer
 
 
@@ -67,15 +67,14 @@ class BaseCrawlerActionView(APIView):
 
         try:
             # フロントからはIDでホテルが来るので、そこから名前を取得する
-            base_hotel = CrawlTarget.objects.get(pk=selected_hotel_id)
-            hotel_name = base_hotel.hotel_name
+            hotel_master = Hotel.objects.get(pk=selected_hotel_id)
+            hotel_name = hotel_master.name
 
             # コマンドに渡す引数を準備
             command_kwargs = {
                 "otas": options.get("otas"),
                 "start_date": options.get("startDate"),
                 "end_date": options.get("endDate"),
-                "export_only": self.export_only,
             }
 
             # コマンドをバックグラウンドで実行
@@ -111,10 +110,18 @@ class ExportFileAPIView(BaseCrawlerActionView):
 
 
 class CrawlStatusAPIView(APIView):
-    def get(self, request, hotel_name):
-        targets = CrawlTarget.objects.filter(hotel_name=hotel_name)
-        serializer = CrawlTargetStatusSerializer(targets, many=True)
-        return Response(serializer.data)
+
+    def get(self, request, hotel_id):
+        try:
+            hotel_master = Hotel.objects.get(pk=hotel_id)
+            targets = CrawlTarget.objects.filter(hotel=hotel_master)
+            serializer = CrawlTargetStatusSerializer(targets, many=True)
+            return Response(serializer.data)
+        except Hotel.DoesNotExist:
+            return Response(
+                {"error": f"ホテル '{hotel_id}' が見つかりません。"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 class ExportExcelAPIView(APIView):
@@ -139,7 +146,7 @@ class ExportExcelAPIView(APIView):
             )
 
         try:
-            if not CrawlTarget.objects.filter(hotel_name=hotel_name).exists():
+            if not Hotel.objects.filter(name=hotel_name).exists():
                 return Response(
                     {"error": f"ホテル '{hotel_name}' が見つかりません。"},
                     status=status.HTTP_404_NOT_FOUND,

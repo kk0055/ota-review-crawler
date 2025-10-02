@@ -1,9 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
-from reviews.models import CrawlTarget
-from reviews.utils.excel_exporter import export_dataframe_to_excel
+from reviews.models import CrawlTarget,Hotel
 
 from django.utils import timezone
-from reviews.services import run_crawl_and_save, get_reviews_as_dataframe
+from reviews.services import run_crawl_and_save
 from reviews.utils.excel_exporter import export_dataframe_to_excel
 
 class Command(BaseCommand):
@@ -48,11 +47,19 @@ class Command(BaseCommand):
         otas = options["otas"]
         start_date = options["start_date"]
         end_date = options["end_date"]
-        should_export_excel = options["export_excel"]
 
-        # DBから対象ホテル情報を取得
+        try:
+          
+            hotel_master = Hotel.objects.get(name=hotel_name)
+            
+        except Hotel.DoesNotExist:
+            raise CommandError(
+                f"ホテルマスター '{hotel_name}' がDBに登録されていません。"
+                f'先に `register_hotel "{hotel_name}"` コマンドで登録してください。'
+            )
+            
         crawl_targets = CrawlTarget.objects.filter(
-            hotel_name=hotel_name
+            hotel=hotel_master
         ).select_related("ota")
 
         if otas:
@@ -61,7 +68,8 @@ class Command(BaseCommand):
         if not crawl_targets.exists():
             ota_filter_msg = f" (OTA: {', '.join(otas)})" if otas else ""
             raise CommandError(
-                f"ホテル '{hotel_name}'{ota_filter_msg} はDBに登録されていません。"
+                f"ホテル '{hotel_name}' はマスターに存在しますが、クロール対象{ota_filter_msg}が設定されていません。"
+                f"`add_crawl_target` コマンドで対象を追加してください。"
             )
 
         self.stdout.write(

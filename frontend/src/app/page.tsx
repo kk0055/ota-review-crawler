@@ -17,9 +17,7 @@ import { useCrawlStatusPoller } from '@/hooks/useCrawlStatusPoller';
 
 interface ApiHotel {
   id: number;
-  hotel_name: string;
-  ota_name: string;
-  crawl_url: string;
+  name: string;
 }
 
 // OTAの定義
@@ -50,18 +48,17 @@ export default function CrawlerAdminPage() {
   });
   const [isExporting, setIsExporting] = useState(false);
 
-  const [pollingHotelName, setPollingHotelName] = useState<string | null>(null);
+  const [pollingHotelId, setPollingHotelId] = useState<number | null>(null);
 
   const {
     statusData,
     isLoading: isPollingLoading,
     error: pollingError,
-  } = useCrawlStatusPoller({ hotelName: pollingHotelName });
+  } = useCrawlStatusPoller({ hotelId: pollingHotelId });
   useEffect(() => {
     const fetchHotels = async () => {
       try {
         const response = await axios.get<ApiHotel[]>(`${API_URL}/hotels/`);
-
         const data = response.data;
         setAllHotels(data);
         setSearchResults(data);
@@ -80,16 +77,16 @@ export default function CrawlerAdminPage() {
     }
 
     const filteredResults = allHotels.filter((hotel) =>
-      hotel.hotel_name.toLowerCase().includes(searchTerm.toLowerCase())
+      hotel.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
     setSearchResults(filteredResults);
   }, [searchTerm, selectedHotel, allHotels]);
 
   const handleSelectHotel = (hotel: ApiHotel) => {
     setSelectedHotel(hotel);
-    setSearchTerm(hotel.hotel_name);
+    setSearchTerm(hotel.name);
   };
-
   const handleClearSelection = () => {
     setSelectedHotel(null);
     setSearchTerm('');
@@ -105,12 +102,11 @@ export default function CrawlerAdminPage() {
       return;
     }
     setIsLoading(true);
-    setPollingHotelName(null);
+    setPollingHotelId(null);
     const payload = {
-      hotel: { id: selectedHotel.id, name: selectedHotel.hotel_name },
+      hotel: { id: selectedHotel.id, name: selectedHotel.name },
       options: {
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-        specifyDate: specifyDate,
         startDate: specifyDate ? startDate : null,
         endDate: specifyDate ? endDate : null,
       },
@@ -120,7 +116,7 @@ export default function CrawlerAdminPage() {
       // 作成したAPIエンドポイントにPOSTリクエストを送信
       const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
       toast.info(response.data.message || 'クローラーの処理を開始しました。');
-      setPollingHotelName(selectedHotel.hotel_name);
+      setPollingHotelId(selectedHotel.id);
     } catch (error: any) {
       console.error('クローラーの起動に失敗しました:', error);
       const errorMessage =
@@ -138,10 +134,9 @@ export default function CrawlerAdminPage() {
     setIsExporting(true);
 
     const payload = {
-      hotel: { id: selectedHotel.id, name: selectedHotel.hotel_name },
+      hotel: { id: selectedHotel.id, name: selectedHotel.name },
       options: {
         otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-        specifyDate: specifyDate,
         startDate: specifyDate ? startDate : null,
         endDate: specifyDate ? endDate : null,
       },
@@ -241,7 +236,7 @@ export default function CrawlerAdminPage() {
                       onClick={() => handleSelectHotel(hotel)}
                       className='px-4 py-3 cursor-pointer hover:bg-indigo-50 transition-colors'
                     >
-                      <p className='font-semibold'>{hotel.hotel_name}</p>
+                      <p className='font-semibold'>{hotel.name}</p>
                     </li>
                   ))}
                 </ul>
@@ -390,10 +385,11 @@ export default function CrawlerAdminPage() {
             )}
           </button>
         </div>
-        {pollingHotelName && (
-          <div style={{ marginTop: '20px' }}>
-            <h3>{pollingHotelName} のクロール状況</h3>
-
+        {pollingHotelId && selectedHotel && (
+          <div className='mt-8 p-6 bg-white rounded-xl shadow-lg'>
+            <h3 className='text-lg font-semibold text-slate-800 mb-4'>
+              「{selectedHotel.name}」のクロール状況
+            </h3>
             {isPollingLoading && !statusData.length && (
               <p>ステータスを取得中...</p>
             )}

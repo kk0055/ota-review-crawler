@@ -36,7 +36,32 @@ class Ota(models.Model):
 
 
 # -----------------------------------------------------------------------------
-# 2. CrawlTargetモデル: クロール対象となるホテルの情報を管理
+# 1. Hotelモデル: ホテルのマスター情報を管理
+# -----------------------------------------------------------------------------
+class Hotel(models.Model):
+    """物理的なホテルそのもののマスター情報を管理するモデル"""
+
+    name = models.CharField(
+        "ホテル正式名称",
+        max_length=200,
+        unique=True,  # ホテル名はユニークとする
+        help_text="ホテルの正式名称（例: 帝国ホテル東京）",
+    )
+
+    created_at = models.DateTimeField("登録日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "ホテルマスター"
+        verbose_name_plural = "ホテルマスター"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+# -----------------------------------------------------------------------------
+#  CrawlTargetモデル: クロール対象となるOTAとホテルの情報を管理
 # -----------------------------------------------------------------------------
 class CrawlTarget(models.Model):
     """
@@ -68,7 +93,16 @@ class CrawlTarget(models.Model):
         help_text="成功メッセージやエラー詳細を格納",
     )
     ota = models.ForeignKey(
-        Ota, verbose_name="OTAサイト", on_delete=models.CASCADE, related_name="hotels"
+        Ota,
+        verbose_name="OTAサイト",
+        on_delete=models.CASCADE,
+        related_name="crawl_targets",
+    )
+    hotel = models.ForeignKey(
+        Hotel, 
+        verbose_name="ホテル",
+        on_delete=models.CASCADE,
+        related_name="crawl_targets"
     )
     hotel_id_in_ota = models.CharField(
         "OTA内のホテルID",
@@ -77,7 +111,7 @@ class CrawlTarget(models.Model):
         blank=True,
         help_text="各OTAサイト内でホテルを一位に識別するID",
     )
-    hotel_name = models.CharField("ホテル名", max_length=200)
+    # hotel_name = models.CharField("ホテル名", max_length=200)
     crawl_url = models.URLField(
         "クロール対象URL",
         max_length=512,  # URLは長くなる可能性があるので余裕を持たせる
@@ -90,18 +124,18 @@ class CrawlTarget(models.Model):
     updated_at = models.DateTimeField("更新日時", auto_now=True)
 
     class Meta:
-        verbose_name = "ホテル（クロール対象）"
-        verbose_name_plural = "ホテル（クロール対象）"
-        ordering = ["ota", "hotel_name"]
+        verbose_name = "クロール対象（ホテル掲載情報）"
+        verbose_name_plural = "クロール対象（ホテル掲載情報）"
+        ordering = ["hotel", "ota"]
         constraints = [
-            # otaとhotel_id_in_otaの組み合わせでユニークにする
+            # otaとhotelの組み合わせでユニークにする
             models.UniqueConstraint(
-                fields=["ota", "hotel_id_in_ota"], name="unique_ota_hotel"
+                fields=["ota", "hotel"], name="unique_ota_hotel_listing"
             )
         ]
 
     def __str__(self):
-        return f"{self.hotel_name} ({self.ota.name})"
+        return f"{self.hotel.name} ({self.ota.name})"
 
 
 # -----------------------------------------------------------------------------
@@ -111,9 +145,9 @@ class Review(models.Model):
     """各OTAサイトから収集した詳細な口コミ情報を格納するモデル"""
 
     # --- 関連情報 ---
-    hotel = models.ForeignKey(
+    crawl_target = models.ForeignKey(
         CrawlTarget,
-        verbose_name="ホテル",
+        verbose_name="クロール対象",
         on_delete=models.CASCADE,
         related_name="reviews",
     )
@@ -221,6 +255,6 @@ class Review(models.Model):
         ordering = ["-review_date"]
 
     def __str__(self):
-        # 識別しやすいようにIDまたはハッシュの先頭を表示
+
         display_id = self.review_id_in_ota or f"hash:{self.review_hash[:7]}"
-        return f"Review ({display_id}) for {self.hotel.hotel_name}"
+        return f"Review ({display_id}) for {self.crawl_target.hotel.name} on {self.crawl_target.ota.name}"

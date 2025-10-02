@@ -11,8 +11,8 @@ urlpatterns = [
     path("crawlers/start/", StartCrawlerAPIView.as_view(), name="start-crawler"),
     path("export/", ExportExcelAPIView.as_view(), name="export-file"),
     path(
-        "crawl-status/<str:hotel_name>/",
+        "crawl-status/<int:hotel_id>/",
         CrawlStatusAPIView.as_view(),
-        name="crawl-status-api",
+        name="crawl-status",
     ),
 ]
