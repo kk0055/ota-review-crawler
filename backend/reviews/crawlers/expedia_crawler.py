@@ -20,14 +20,13 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     # Chromeオプションの設定
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--lang=ja-JP")
+    # Expediaはヘッドレスだと実行できない
     # chrome_options.add_argument("--headless")
 
     # 1. サンドボックスを無効にする (特にコンテナやCI環境で有効)
     chrome_options.add_argument('--no-sandbox')
-
     # 2. /dev/shmの使用を無効にする (メモリ不足によるクラッシュを防ぐ)
     chrome_options.add_argument('--disable-dev-shm-usage')
-
     # 3. GPUを無効にする (ヘッドレスモードでの描画問題を回避)
     chrome_options.add_argument('--disable-gpu')
 
@@ -66,7 +65,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     try:
         print(f"アクセス中: {url}")
         driver.get(url)
-
+        print(f"ページのタイトル: {driver.title}")
         try:
             # "すべて承諾" ボタン (ID: onetrust-accept-btn-handler) が表示されるまで待つ
             accept_cookies_button = wait.until(
