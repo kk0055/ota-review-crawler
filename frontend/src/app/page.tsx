@@ -21,6 +21,9 @@ import {
   ApiHotel,
   CrawlerOptions,
 } from '@/services/crawlerApi';
+import { DatePicker } from '@/components/DatePicker';
+import { format } from 'date-fns';
+
 
 // OTAの定義
 const otas = [
@@ -31,6 +34,7 @@ const otas = [
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 export default function CrawlerAdminPage() {
+  
   const [allHotels, setAllHotels] = useState<ApiHotel[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<ApiHotel[]>([]);
@@ -38,8 +42,15 @@ export default function CrawlerAdminPage() {
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [specifyDate, setSpecifyDate] = useState(true);
-  const [startDate, setStartDate] = useState('2025-09-10');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    new Date('2025-09-10')
+  );
+  const [endDate, setEndDate] = useState<Date | undefined>();
+
+  // APIに渡す際に、Dateオブジェクトを 'yyyy-MM-dd' 形式の文字列に変換する必要がある
+  const formatDate = (date: Date | undefined) => {
+    return date ? format(date, 'yyyy-MM-dd') : null;
+  };
   const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
     expedia: true,
     agoda: true,
@@ -105,8 +116,8 @@ export default function CrawlerAdminPage() {
 
     const options: CrawlerOptions = {
       otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-      startDate: specifyDate ? startDate : null,
-      endDate: specifyDate ? endDate : null,
+      startDate: specifyDate ? formatDate(startDate) : null,
+      endDate: specifyDate ? formatDate(endDate) : null,
     };
 
     try {
@@ -126,8 +137,8 @@ export default function CrawlerAdminPage() {
 
     const options: CrawlerOptions = {
       otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-      startDate: specifyDate ? startDate : null,
-      endDate: specifyDate ? endDate : null,
+      startDate: specifyDate ? formatDate(startDate) : null,
+      endDate: specifyDate ? formatDate(endDate) : null,
     };
     try {
       await exportFile(selectedHotel, options);
@@ -236,21 +247,23 @@ export default function CrawlerAdminPage() {
             >
               <div className='grid sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg'>
                 <div>
-                  <label className='block text-sm ...'>開始日</label>
-                  <input
-                    type='date'
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className='form-input w-full rounded-md border-slate-300'
+                  <label className='block text-sm font-medium text-slate-600 mb-1'>
+                    開始日
+                  </label>
+                  <DatePicker
+                    date={startDate}
+                    setDate={setStartDate}
+                    placeholder='開始日を選択'
                   />
                 </div>
                 <div>
-                  <label className='block text-sm ...'>終了日</label>
-                  <input
-                    type='date'
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className='form-input w-full rounded-md border-slate-300'
+                  <label className='block text-sm font-medium text-slate-600 mb-1'>
+                    終了日
+                  </label>
+                  <DatePicker
+                    date={endDate}
+                    setDate={setEndDate}
+                    placeholder='終了日を選択'
                   />
                 </div>
               </div>
