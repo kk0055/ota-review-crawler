@@ -13,12 +13,14 @@ import {
   FileDown,
 } from 'lucide-react';
 import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useCrawlStatusPoller } from '@/hooks/useCrawlStatusPoller';
-
-interface ApiHotel {
-  id: number;
-  name: string;
-}
+import {
+  runCrawler,
+  exportFile,
+  ApiHotel,
+  CrawlerOptions,
+} from '@/services/crawlerApi';
 
 // OTAの定義
 const otas = [
@@ -35,19 +37,15 @@ export default function CrawlerAdminPage() {
   const [selectedHotel, setSelectedHotel] = useState<ApiHotel | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  // New states for options
   const [specifyDate, setSpecifyDate] = useState(true);
   const [startDate, setStartDate] = useState('2025-09-10');
   const [endDate, setEndDate] = useState('');
-
   const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
     expedia: true,
     agoda: true,
     rakuten: false,
   });
   const [isExporting, setIsExporting] = useState(false);
-
   const [pollingHotelId, setPollingHotelId] = useState<number | null>(null);
 
   const {
@@ -55,6 +53,7 @@ export default function CrawlerAdminPage() {
     isLoading: isPollingLoading,
     error: pollingError,
   } = useCrawlStatusPoller({ hotelId: pollingHotelId });
+
   useEffect(() => {
     const fetchHotels = async () => {
       try {
@@ -103,27 +102,19 @@ export default function CrawlerAdminPage() {
     }
     setIsLoading(true);
     setPollingHotelId(null);
-    const payload = {
-      hotel: { id: selectedHotel.id, name: selectedHotel.name },
-      options: {
-        otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-        startDate: specifyDate ? startDate : null,
-        endDate: specifyDate ? endDate : null,
-      },
+
+    const options: CrawlerOptions = {
+      otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+      startDate: specifyDate ? startDate : null,
+      endDate: specifyDate ? endDate : null,
     };
 
     try {
-      // 作成したAPIエンドポイントにPOSTリクエストを送信
-      const response = await axios.post(`${API_URL}/crawlers/start/`, payload);
-      toast.info(response.data.message || 'クローラーの処理を開始しました。');
+      const message = await runCrawler(selectedHotel, options);
+      toast.info(message);
       setPollingHotelId(selectedHotel.id);
     } catch (error: any) {
-      console.error('クローラーの起動に失敗しました:', error);
-      const errorMessage =
-        error.response && error.response.data && error.response.data.error
-          ? error.response.data.error
-          : 'サーバーとの通信中にエラーが発生しました。';
-      alert(`エラー: ${errorMessage}`);
+      toast.error(`エラー: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -133,59 +124,25 @@ export default function CrawlerAdminPage() {
     if (!selectedHotel) return;
     setIsExporting(true);
 
-    const payload = {
-      hotel: { id: selectedHotel.id, name: selectedHotel.name },
-      options: {
-        otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
-        startDate: specifyDate ? startDate : null,
-        endDate: specifyDate ? endDate : null,
-      },
+    const options: CrawlerOptions = {
+      otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+      startDate: specifyDate ? startDate : null,
+      endDate: specifyDate ? endDate : null,
     };
     try {
-      const response = await axios.post(`${API_URL}/export/`, payload, {
-        responseType: 'blob',
-      });
-      const contentDisposition = response.headers['content-disposition'];
-      console.log('取得した content-disposition の値:', contentDisposition);
-      let filename = 'export.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(
-          /filename\*=UTF-8''(.+)/
-        );
-        if (filenameMatch && filenameMatch.length > 1) {
-          filename = decodeURIComponent(filenameMatch[1]);
-        }
-      }
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      console.error('エクスポートに失敗しました:', err);
-      if (err.response && err.response.data instanceof Blob) {
-        const errorText = await err.response.data.text();
-        try {
-          const errorJson = JSON.parse(errorText);
-          console.error(errorJson.error || '不明なエラーが発生しました。');
-        } catch {
-          console.error('サーバーから予期せぬエラーが返されました。');
-        }
-      } else {
-        console.error('エクスポート処理中にエラーが発生しました。');
-      }
+      await exportFile(selectedHotel, options);
+    } catch (error: any) {
+      toast.error(`エクスポート失敗: ${error.message}`);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const isButtonDisabled = !selectedHotel || isLoading;
+    const isRunCrawlerButtonDisabled =
+      !selectedHotel || isLoading || isPollingLoading;
 
-  // --- Render ---
+    const isExportButtonDisabled = !selectedHotel || isExporting;
+
   return (
     <div className='min-h-screen bg-slate-50 text-slate-800'>
       <main className='max-w-3xl mx-auto p-4 sm:p-8'>
@@ -333,13 +290,13 @@ export default function CrawlerAdminPage() {
           {/* Secondary Action: Export File */}
           <button
             onClick={handleExportFile}
-            disabled={isButtonDisabled}
+            disabled={isExportButtonDisabled}
             className={`
               flex items-center justify-center w-full sm:w-auto font-bold py-3 px-8 rounded-full
               transition-all duration-300 ease-in-out
               bg-white border-2 
               ${
-                isButtonDisabled
+                isExportButtonDisabled
                   ? 'border-slate-300 text-slate-400 cursor-not-allowed'
                   : 'border-indigo-600 text-indigo-600 hover:bg-indigo-50 transform hover:scale-105'
               }
@@ -361,12 +318,12 @@ export default function CrawlerAdminPage() {
           {/* Primary Action: Run Crawler */}
           <button
             onClick={handleRunCrawler}
-            disabled={isButtonDisabled}
+            disabled={isRunCrawlerButtonDisabled}
             className={`
               flex items-center justify-center w-full sm:w-auto font-bold py-3 px-8 rounded-full text-white 
               transition-all duration-300 ease-in-out
               ${
-                isButtonDisabled
+                isRunCrawlerButtonDisabled
                   ? 'bg-slate-400 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl transform hover:scale-105'
               }
@@ -417,6 +374,18 @@ export default function CrawlerAdminPage() {
           </div>
         )}
       </main>
+      <ToastContainer
+        position='bottom-right' // 表示位置 (右下)
+        autoClose={5000} // 5秒で自動的に閉じる
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme='light'
+      />
     </div>
   );
 }
