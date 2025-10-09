@@ -83,7 +83,7 @@ class BaseCrawlerActionView(APIView):
 
             action_name = "ファイル出力" if self.export_only else "クロール処理"
             message = (
-                f"'{hotel_name}' の {action_name} をバックグラウンドで開始しました。"
+                f"「{hotel_name}」 の {action_name} をバックグラウンドで開始しました。"
             )
 
             return Response({"message": message}, status=status.HTTP_202_ACCEPTED)

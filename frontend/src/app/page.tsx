@@ -245,25 +245,21 @@ export default function CrawlerAdminPage() {
                 specifyDate ? 'max-h-40 mt-4 opacity-100' : 'max-h-0 opacity-0'
               }`}
             >
-              <div className='grid sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg'>
-                <div>
-                  <label className='block text-sm font-medium text-slate-600 mb-1'>
-                    開始日
-                  </label>
+              <div className='p-4 bg-slate-50 rounded-lg'>
+                <label className='block text-sm font-medium text-slate-600 mb-2'>
+                  対象期間
+                </label>
+                <div className='grid grid-cols-[1fr_auto_1fr] items-center gap-2'>
                   <DatePicker
                     date={startDate}
                     setDate={setStartDate}
-                    placeholder='開始日を選択'
+                    placeholder='YYYY/MM/DD'
                   />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-slate-600 mb-1'>
-                    終了日
-                  </label>
+                  <span className='text-slate-500'>～</span>
                   <DatePicker
                     date={endDate}
                     setDate={setEndDate}
-                    placeholder='終了日を選択'
+                    placeholder='YYYY/MM/DD'
                   />
                 </div>
               </div>
