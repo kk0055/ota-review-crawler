@@ -7,7 +7,9 @@ import hashlib
 import pandas as pd
 from .models import Review, CrawlTarget, Ota, Hotel
 from .crawlers.expedia_crawler import scrape_expedia_reviews
+from .crawlers.rakuten_travel_crawler import scrape_rakuten_travel_reviews
 import logging
+from decimal import Decimal, InvalidOperation
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -32,7 +34,9 @@ EXCEL_HEADER_MAP = {
 }
 
 
-def run_crawl_and_save(target: CrawlTarget, start_date: str, end_date: str):
+def run_crawl_and_save(
+    target: CrawlTarget, start_date: str, end_date: str, hotel_slug: str
+):
     """
     指定されたCrawlTargetに対してクロールを実行し、結果をDBに保存する。
     :return: (成功フラグ, メッセージ) のタプル
@@ -47,14 +51,21 @@ def run_crawl_and_save(target: CrawlTarget, start_date: str, end_date: str):
             reviews_list = scrape_expedia_reviews(
                 target.crawl_url, start_date, end_date
             )
-        # ... 他のOTAの処理 ...
+        elif target.ota.name == "楽天トラベル":
+            print(f"OTA: 楽天トラベル を検出。楽天トラベル用クローラーを開始します。")
+            reviews_list = scrape_rakuten_travel_reviews(
+                url=target.crawl_url,
+                hotel_id=hotel_slug,
+                start_date_str=start_date,
+                end_date_str=end_date,
+            )
         else:
             return True, f"'{target.ota.name}' に対応するクローラーがありません。"
 
         if not reviews_list:
             return True, "口コミは取得されませんでした。"
 
-        save_reviews_to_db(reviews_list, target)
+        # save_reviews_to_db(reviews_list, target)
 
         message = f"正常に処理完了。取得件数: {len(reviews_list)}"
         return True, message
@@ -126,6 +137,7 @@ def save_reviews_to_db(reviews_list, crawl_target: CrawlTarget):
     """取得したレビューのリストをデータベースに保存/更新します。"""
     logging.info(f"  取得した {len(reviews_list)} 件の口コミをDBに保存します...")
     saved_count, updated_count, skipped_count = 0, 0, 0
+    model_field_names = {f.name for f in Review._meta.get_fields()}
 
     for review_data in reviews_list:
         try:
@@ -137,41 +149,44 @@ def save_reviews_to_db(reviews_list, crawl_target: CrawlTarget):
                 f"{crawl_target.id}-"
                 f"{review_data.get('reviewer_name', '')}-"
                 f"{review_data.get('review_date', '')}-"
-                f"{review_data.get('overall_score', '')}-"
+                f"{review_data.get('overall_score_original', '')}-"
                 f"{review_data.get('review_comment', '')}"
             )
             review_hash = hashlib.sha256(source_string.encode("utf-8")).hexdigest()
 
-            defaults_to_update = {
-                "crawl_target": crawl_target, # "hotel": hotel から変更
+            # review_dataからモデルに存在するフィールドを抽出し、
+            # さらに「値がNoneでない」ものだけをdefaults辞書に含める
+            defaults = {
+                key: value
+                for key, value in review_data.items()
+                if key in model_field_names and value is not None
             }
 
-            # 各項目をチェックし、有効なデータだけを defaults に追加していく
-            if review_data.get("overall_score", "").isdigit():
-                defaults_to_update["overall_score"] = int(review_data["overall_score"])
+            defaults["crawl_target"] = crawl_target
 
-            # 文字列系のフィールドは、Noneや空文字列でないことを確認
-            string_fields = [
-                "reviewer_name",
-                "review_date",
-                "traveler_type",
-                "review_comment",
-                "translated_review_comment",
-            ]
-            for field in string_fields:
-                value = review_data.get(field)
-                if value:  # valueがNoneや空文字列でない場合にTrueとなる
-                    defaults_to_update[field] = value
+            for key, value in defaults.items():
+                if "_normalized" in key:  
+                    try:
+                        defaults[key] = Decimal(str(value))
+                    except InvalidOperation:
+                        logging.warning(
+                            f"  '{key}' の値 '{value}' をDecimalに変換できません。Noneに設定します。"
+                        )
+                        defaults[key] = (
+                            None  
+                        )
 
-            # update_or_createでDBに保存/更新
+            # review_hashをキーに、DBに保存/更新
             _obj, created = Review.objects.update_or_create(
                 review_hash=review_hash,
-                defaults=defaults_to_update,
+                defaults=defaults,
             )
+
             if created:
                 saved_count += 1
             else:
                 updated_count += 1
+
         except Exception as e:
             logging.warning(
                 f"    DB保存エラー: {e} スキップします. データ: {review_data}"

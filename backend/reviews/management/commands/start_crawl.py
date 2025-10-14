@@ -3,7 +3,7 @@ from reviews.models import CrawlTarget,Hotel
 
 from django.utils import timezone
 from reviews.services import run_crawl_and_save
-from reviews.utils.excel_exporter import export_dataframe_to_excel
+# from reviews.utils.excel_exporter import export_dataframe_to_excel
 
 class Command(BaseCommand):
     help = "指定されたホテルの口コミ情報をクロールしてDBに保存します。"
@@ -49,15 +49,15 @@ class Command(BaseCommand):
         end_date = options["end_date"]
 
         try:
-          
+
             hotel_master = Hotel.objects.get(name=hotel_name)
-            
+
         except Hotel.DoesNotExist:
             raise CommandError(
                 f"ホテルマスター '{hotel_name}' がDBに登録されていません。"
                 f'先に `register_hotel "{hotel_name}"` コマンドで登録してください。'
             )
-            
+
         crawl_targets = CrawlTarget.objects.filter(
             hotel=hotel_master
         ).select_related("ota")
@@ -84,14 +84,14 @@ class Command(BaseCommand):
             target.last_crawl_status = CrawlTarget.CrawlStatus.PENDING
             target.save()
 
-            success, message = run_crawl_and_save(target, start_date, end_date)
+            success, message = run_crawl_and_save(
+                target, start_date, end_date, hotel_slug=hotel_master.slug)
 
             target.last_crawl_status = CrawlTarget.CrawlStatus.SUCCESS if success else CrawlTarget.CrawlStatus.FAILURE
             target.last_crawl_message = message
             target.last_crawled_at = timezone.now()
             target.save()
             self.stdout.write(f"  結果: {message}")
-
 
         # if should_export_excel:
         #     self.stdout.write("\n▶ Excelファイルを作成します...")

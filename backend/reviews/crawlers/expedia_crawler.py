@@ -8,6 +8,9 @@ import undetected_chromedriver as uc
 from datetime import datetime, date
 import logging
 from selenium import webdriver
+from ..normalizer import DataNormalizer
+from reviews.utils import detect_language, get_language_name_ja,infer_nationality_from_language
+
 
 def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = None):
     """
@@ -24,11 +27,11 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     # chrome_options.add_argument("--headless")
 
     # 1. サンドボックスを無効にする (特にコンテナやCI環境で有効)
-    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument("--no-sandbox")
     # 2. /dev/shmの使用を無効にする (メモリ不足によるクラッシュを防ぐ)
-    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument("--disable-dev-shm-usage")
     # 3. GPUを無効にする (ヘッドレスモードでの描画問題を回避)
-    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument("--disable-gpu")
 
     # WebDriver Managerを使って、Chromeのバージョンに合ったWebDriverを自動設定
     # service = Service(ChromeDriverManager().install())
@@ -38,6 +41,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
     driver.set_window_size(500, 500)
     # 処理が完了するまで最大で待機する時間（秒）
     wait = WebDriverWait(driver, 10)
+    normalizer = DataNormalizer()
 
     start_date_obj = None
     if start_date_str:
@@ -69,7 +73,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
         try:
             # "すべて承諾" ボタン (ID: onetrust-accept-btn-handler) が表示されるまで待つ
             accept_cookies_button = wait.until(
-            EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
+                EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
             )
             print("Cookie同意ポップアップを検知しました。承諾しています...")
             driver.execute_script("arguments[0].click();", accept_cookies_button)
@@ -158,14 +162,20 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                     )  # h4タグの親要素を取得
                     reviewer_name = author_info.find_element(By.TAG_NAME, "h4").text
                     # 旅行者タイプ
-                    traveler_type = "" 
+                    original_traveler_type = ""
                     try:
-                        traveler_type_element = author_info.find_element(By.CSS_SELECTOR, "h4 + div")
+                        traveler_type_element = author_info.find_element(
+                            By.CSS_SELECTOR, "h4 + div"
+                        )
                         # 日付と区別するため、テキストに「年」が含まれていないことを確認
                         if "年" not in traveler_type_element.text:
-                            traveler_type = traveler_type_element.text
+                            original_traveler_type = traveler_type_element.text
                     except NoSuchElementException:
                         print("  -> 旅行者タイプの項目は見つかりませんでした。")
+
+                    normalized_data = normalizer.normalize_from_tags(
+                        original_traveler_type, "expedia"
+                    )
 
                     review_date_str = author_info.find_element(
                         By.XPATH, ".//div[contains(text(), '年')]"
@@ -232,13 +242,22 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                         review_comment = ""
                         translated_review_comment = ""
 
+                    language_code = detect_language(review_comment)
+                    language_name = get_language_name_ja(language_code)
+                    nationality_info = infer_nationality_from_language(language_code)
                     review_data = {
                         "overall_score": overall_score,
                         "reviewer_name": reviewer_name,
                         "review_date": review_date_for_db,
-                        "traveler_type": traveler_type,
+                        "traveler_type": normalized_data.get("traveler_type"),
+                        "traveler_type_original": original_traveler_type,
+                        "purpose_of_visit": normalized_data.get("purpose"),
+                        "purpose_of_visit_original": original_traveler_type,
                         "review_comment": review_comment.strip(),
                         "translated_review_comment": translated_review_comment.strip(),
+                        "language": language_name,
+                        "nationality_region": nationality_info.get("major"),
+                        "nationality_country": nationality_info.get("minor"),
                     }
 
                     all_reviews_data.append(review_data)
@@ -247,11 +266,25 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                     print(f"  評価: {review_data['overall_score']}")
                     print(f"  投稿者: {review_data['reviewer_name']}")
                     print(f"  旅行タイプ: {review_data['traveler_type']}")
+                    print(
+                        f"  旅行タイプ（オリジナル）: {review_data['traveler_type_original']}"
+                    )
+                    print(f"  旅行目的: {review_data['purpose_of_visit']}")
+                    print(
+                        f"  旅行目的（オリジナル）: {review_data['purpose_of_visit_original']}"
+                    )
                     print(f"  投稿日: {review_data['review_date']}")
-                    # 口コミ本文は長くなる可能性があるので、先頭50文字だけ表示するなどの工夫をすると見やすい
+                    print(f"  言語: {review_data['language']}")
+                    print(
+                        f"  国籍: {review_data['nationality_region']} - {review_data['nationality_country']}"
+                    )
                     print(f"  本文: {review_data['review_comment'][:50]}...")
-                    if review_data['translated_review_comment']: # 翻訳文がある場合のみ表示
-                        print(f"  翻訳文: {review_data['translated_review_comment'][:50]}...")
+                    if review_data[
+                        "translated_review_comment"
+                    ]:  # 翻訳文がある場合のみ表示
+                        print(
+                            f"  翻訳文: {review_data['translated_review_comment'][:50]}..."
+                        )
                     print("-" * 30)
 
                 except Exception as e:

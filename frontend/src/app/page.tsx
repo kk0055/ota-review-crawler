@@ -29,7 +29,7 @@ import { format } from 'date-fns';
 const otas = [
   { id: 'expedia', name: 'Expedia' },
   { id: 'agoda', name: 'agoda' },
-  { id: 'rakuten', name: '楽天トラベル' },
+  { id: '楽天トラベル', name: '楽天トラベル' },
 ];
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -262,6 +262,11 @@ export default function CrawlerAdminPage() {
                     placeholder='YYYY/MM/DD'
                   />
                 </div>
+                {startDate && endDate && startDate > endDate && (
+                  <p className='text-red-500 text-sm mt-2'>
+                    終了日は開始日より後の日付を選択してください。
+                  </p>
+                )}
               </div>
             </div>
           </div>
