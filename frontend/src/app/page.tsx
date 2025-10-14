@@ -25,16 +25,15 @@ import { DatePicker } from '@/components/DatePicker';
 import { format } from 'date-fns';
 
 
-// OTAの定義
-const otas = [
-  { id: 'expedia', name: 'Expedia' },
-  { id: 'agoda', name: 'agoda' },
-  { id: '楽天トラベル', name: '楽天トラベル' },
-];
+interface ApiOta {
+  id: number;
+  name: string;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 export default function CrawlerAdminPage() {
-  
+  const [allOtas, setAllOtas] = useState<ApiOta[]>([]);
   const [allHotels, setAllHotels] = useState<ApiHotel[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<ApiHotel[]>([]);
@@ -52,8 +51,8 @@ export default function CrawlerAdminPage() {
     return date ? format(date, 'yyyy-MM-dd') : null;
   };
   const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
-    expedia: true,
-    agoda: true,
+    3: true,
+    4: true,
     rakuten: false,
   });
   const [isExporting, setIsExporting] = useState(false);
@@ -79,6 +78,18 @@ export default function CrawlerAdminPage() {
 
     fetchHotels();
   }, []);
+  useEffect(() => {
+    const fetchOtas = async () => {
+      try {
+        const response = await axios.get<ApiOta[]>(`${API_URL}/otas/`);
+        setAllOtas(response.data);
+      } catch (error) {
+        console.error('Failed to fetch OTAs:', error);
+      }
+    };
+
+    fetchOtas();
+  }, []);
 
   useEffect(() => {
     if (selectedHotel) {
@@ -102,7 +113,7 @@ export default function CrawlerAdminPage() {
     setSearchTerm('');
   };
 
-  const handleOtaChange = (otaId: string) => {
+  const handleOtaChange = (otaId: number) => {
     setSelectedOtas((prev) => ({ ...prev, [otaId]: !prev[otaId] }));
   };
 
@@ -281,7 +292,7 @@ export default function CrawlerAdminPage() {
               </span>
             </h3>
             <div className='flex flex-wrap gap-x-6 gap-y-3'>
-              {otas.map((ota) => (
+              {allOtas.map((ota) => (
                 <label
                   key={ota.id}
                   className='flex items-center space-x-2 cursor-pointer'

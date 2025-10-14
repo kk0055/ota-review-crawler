@@ -1,6 +1,6 @@
 from rest_framework.generics import ListAPIView
-from ..models import CrawlTarget, Hotel
-from .serializers import HotelSerializer, CrawlTargetStatusSerializer
+from ..models import CrawlTarget, Hotel,Ota
+from .serializers import OtaSerializer, HotelSerializer, CrawlTargetStatusSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -17,9 +17,18 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+
 # -----------------------------------------------------------------------------
 # API Views
 # -----------------------------------------------------------------------------
+class OtaListView(ListAPIView):
+    """
+    登録されている全てのOTAを一覧表示するためのAPIビュー
+    """
+    queryset = Ota.objects.all().order_by("name")  
+    serializer_class = OtaSerializer
+
+
 class HotelListAPIView(ListAPIView):
     """
     ホテルの一覧を返すAPIビュー
@@ -72,7 +81,7 @@ class BaseCrawlerActionView(APIView):
 
             # コマンドに渡す引数を準備
             command_kwargs = {
-                "otas": options.get("otas"),
+                "ota_ids": options.get("otas"),
                 "start_date": options.get("startDate"),
                 "end_date": options.get("endDate"),
             }
@@ -134,9 +143,9 @@ class ExportExcelAPIView(APIView):
 
         hotel_data = request.data.get("hotel", {})
         hotel_name = hotel_data.get("name") 
-
+        selected_hotel_id = hotel_data.get("id")
         options_data = request.data.get("options", {})
-        otas = options_data.get("otas")
+        otas_ids = options_data.get("otas")
         start_date = options_data.get("startDate")
         end_date = options_data.get("endDate")
 
@@ -151,11 +160,11 @@ class ExportExcelAPIView(APIView):
                     {"error": f"ホテル '{hotel_name}' が見つかりません。"},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            print(f"--- [View] Calling service with hotel_name: '{hotel_name}', otas: {otas} ---")
             # --- サービス関数を呼び出す (hotel_name を渡す) ---
             df = get_reviews_as_dataframe(
                 hotel_name=hotel_name,
-                ota_names=otas,
+                hotel_id=selected_hotel_id, 
+                ota_ids=otas_ids,
                 start_date=start_date,
                 end_date=end_date,
             )

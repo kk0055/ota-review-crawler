@@ -245,6 +245,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                     language_code = detect_language(review_comment)
                     language_name = get_language_name_ja(language_code)
                     nationality_info = infer_nationality_from_language(language_code)
+
                     review_data = {
                         "overall_score": overall_score,
                         "reviewer_name": reviewer_name,
@@ -255,7 +256,8 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                         "purpose_of_visit_original": original_traveler_type,
                         "review_comment": review_comment.strip(),
                         "translated_review_comment": translated_review_comment.strip(),
-                        "language": language_name,
+                        "language_code": language_code,
+                        "review_language": language_name,
                         "nationality_region": nationality_info.get("major"),
                         "nationality_country": nationality_info.get("minor"),
                     }
@@ -274,11 +276,12 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                         f"  旅行目的（オリジナル）: {review_data['purpose_of_visit_original']}"
                     )
                     print(f"  投稿日: {review_data['review_date']}")
-                    print(f"  言語: {review_data['language']}")
+                    print(f"  言語: {review_data['review_language']}")
                     print(
                         f"  国籍: {review_data['nationality_region']} - {review_data['nationality_country']}"
                     )
                     print(f"  本文: {review_data['review_comment'][:50]}...")
+                    print(f"  言語コード: {review_data['language_code']}")
                     if review_data[
                         "translated_review_comment"
                     ]:  # 翻訳文がある場合のみ表示
@@ -288,7 +291,9 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                     print("-" * 30)
 
                 except Exception as e:
-                    print(f"口コミの解析中にエラーが発生しました: {e}")
+                    print(
+                        f"口コミの解析中に予期せぬエラーが発生しました: {type(e).__name__}: {e}"
+                    )
 
             processed_reviews_count = len(review_elements)
 

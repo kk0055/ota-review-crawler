@@ -19,6 +19,7 @@ logging.basicConfig(
 EXCEL_HEADER_MAP = {
     # "ホテルID": "hotel_id",
     "投稿月日": "review_date",
+    "OTA": "crawl_target__ota__name",
     "ユーザー名": "reviewer_name",
     "国籍_大分類": "nationality_region",
     "国籍_小分類": "nationality_country",
@@ -77,8 +78,9 @@ def run_crawl_and_save(
 
 
 def get_reviews_as_dataframe(
+    hotel_id: int,
     hotel_name: str,
-    ota_names: list = None,
+    ota_ids: list = None,
     start_date: str = None,
     end_date: str = None,
 ) -> pd.DataFrame:
@@ -95,8 +97,8 @@ def get_reviews_as_dataframe(
 
     targets = CrawlTarget.objects.filter(hotel=hotel_master)
 
-    if ota_names:
-        targets = targets.filter(ota__name__in=ota_names)
+    if ota_ids:
+        targets = targets.filter(ota__id__in=ota_ids)
 
     if not targets.exists():
         print("--- [Service] No target hotels found. Returning empty DataFrame. ---")
@@ -116,6 +118,8 @@ def get_reviews_as_dataframe(
     fields_to_get = list(EXCEL_HEADER_MAP.values())
     review_list = list(reviews.values(*fields_to_get))
     df = pd.DataFrame(review_list)
+
+    # カラム名を日本語ヘッダーにリネーム
     rename_map = {v: k for k, v in EXCEL_HEADER_MAP.items()}
     df.rename(columns=rename_map, inplace=True)
     print(f"--- [Service] Data found. Returning DataFrame with {len(df)} rows. ---")

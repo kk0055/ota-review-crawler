@@ -293,6 +293,12 @@ class Review(models.Model):
     review_title = models.CharField(
         "口コミタイトル", max_length=255, null=True, blank=True
     )
+    language_code = models.CharField(
+        "言語コード",
+        max_length=10,
+        null=True,
+        blank=True,
+    )
     review_language = models.CharField("言語", max_length=50, null=True, blank=True)
     review_comment = models.TextField("オリジナルの口コミ本文", null=True, blank=True)
     translated_review_comment = models.TextField(

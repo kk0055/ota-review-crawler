@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from reviews.models import CrawlTarget,Hotel
+from reviews.models import CrawlTarget,Hotel,Ota
 
 from django.utils import timezone
 from reviews.services import run_crawl_and_save
@@ -21,6 +21,13 @@ class Command(BaseCommand):
             nargs="+",  # 1つ以上のOTA名をリストで受け取る
             default=None,  # 指定がない場合はNone
             help="クロール対象のOTA名のリスト (例: Expedia agoda)。指定がない場合は登録されている全OTAが対象。",
+        )
+        parser.add_argument(
+            "--ota-ids",
+            nargs="+",
+            type=int, # IDなので整数型で受け取る
+            default=None,
+            help="【ID指定】クロール対象のOTAのIDリスト (例: 3 4)。APIからの実行時に使用。",
         )
         parser.add_argument(
             "--start-date",
@@ -45,6 +52,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         hotel_name = options["hotel_name"]
         otas = options["otas"]
+        ota_ids = options["ota_ids"]
         start_date = options["start_date"]
         end_date = options["end_date"]
 
@@ -61,9 +69,18 @@ class Command(BaseCommand):
         crawl_targets = CrawlTarget.objects.filter(
             hotel=hotel_master
         ).select_related("ota")
-
-        if otas:
+        
+        ota_filter_msg = ""
+        if otas:  # 名前でフィルタリング
             crawl_targets = crawl_targets.filter(ota__name__in=otas)
+            ota_filter_msg = f" (OTA名: {', '.join(otas)})"
+        elif ota_ids:  # IDでフィルタリング
+            crawl_targets = crawl_targets.filter(ota__id__in=ota_ids)
+            # エラーメッセージ用に、IDから名前を取得しておくとより親切
+            ota_names_for_msg = list(
+                Ota.objects.filter(id__in=ota_ids).values_list("name", flat=True)
+            )
+            ota_filter_msg = f" (OTA: {', '.join(ota_names_for_msg)})"
 
         if not crawl_targets.exists():
             ota_filter_msg = f" (OTA: {', '.join(otas)})" if otas else ""

@@ -15,12 +15,12 @@ class Command(BaseCommand):
 
     # --- 一括登録用のデータリスト ---
     OTA_INITIAL_DATA = [
-        {"name": "Booking.com", "url": "https://www.booking.com/"},
-        {"name": "Agoda", "url": "https://www.agoda.com/ja-jp/"},
         {"name": "Expedia", "url": "https://www.expedia.co.jp/"},
         {"name": "楽天トラベル", "url": "https://travel.rakuten.co.jp/"},
-        {"name": "一休.com", "url": "https://www.ikyu.com/"},
-        {"name": "Googleトラベル", "url": "https://www.google.com/travel/hotels"},
+        {"name": "Google", "url": "https://www.google.com/travel"},
+        # {"name": "Booking.com", "url": "https://www.booking.com/"},
+        # {"name": "Agoda", "url": "https://www.agoda.com/ja-jp/"},
+        # {"name": "一休.com", "url": "https://www.ikyu.com/"},
     ]
 
     def add_arguments(self, parser):

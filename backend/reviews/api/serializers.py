@@ -3,6 +3,14 @@ from rest_framework import serializers
 from ..models import CrawlTarget, Ota, Hotel
 
 
+class OtaSerializer(serializers.ModelSerializer):
+    """OTAの一覧を返すためのシリアライザー"""
+
+    class Meta:
+        model = Ota
+        fields = ["id", "name"]
+
+
 class HotelSerializer(serializers.ModelSerializer):
     """ホテルマスターの一覧を返すためのシリアライザー"""
 

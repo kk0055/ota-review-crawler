@@ -270,7 +270,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
         print(f"DEBUG: original_room_type (正規化前) = {repr(original_room_type)}")
 
         normalized_room_type = normalizer.normalize_room_type(
-            original_room_type, ota_name, hotel_id
+            original_room_type, hotel_id, ota_name
         )
 
         # 抽出したデータを辞書にまとめる
