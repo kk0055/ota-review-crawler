@@ -45,22 +45,24 @@ def detect_language(text: str) -> str:
         text (str): 言語を判定したいテキスト。
     Returns:
         str: 判定された言語のISO 639-1コード ('ja', 'en'など)。
-             テキストが短すぎる、または判定不能な場合は 'unknown' を返す。
+             テキストが短すぎる、または判定不能な場合は None を返す。
     """
     # テキストが空、または空白文字のみの場合は判定不能とする
     if not text or not text.strip():
-        return "unknown"
+        return None
 
     try:
         return detect(text)
     except LangDetectException:
-        return "unknown"
+        return None
 
 
 def get_language_name_ja(lang_code: str) -> str:
     """
     言語コードを日本語の表示名に変換する。
     """
+    if not lang_code:
+        return None
     ja_name = LANG_MAP_JA.get(lang_code)
     if ja_name:
         return ja_name
@@ -69,7 +71,8 @@ def get_language_name_ja(lang_code: str) -> str:
 
         lang_obj = pycountry.languages.get(alpha_2=lang_code)
         if lang_obj:
-            return f"{lang_obj.name} ({lang_code})"
+            name = getattr(lang_obj, 'name', lang_code)
+            return f"{name} ({lang_code})"
     except (KeyError, AttributeError):
         # pycountryに存在しない、または無効なコードの場合
         pass
@@ -117,6 +120,8 @@ def infer_nationality_from_language(lang_code: str) -> dict:
     """
     言語コードから推定される国籍カテゴリ情報を返す。
     """
+    if not lang_code:
+        return {"major": None, "minor": None}
     # マッピングに存在しない場合のデフォルト値
     default_info = {"major": "海外その他", "minor": "不明"}
 

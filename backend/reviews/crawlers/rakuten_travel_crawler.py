@@ -8,7 +8,12 @@ from datetime import datetime
 import re
 import pprint
 from ..normalizer import DataNormalizer 
-from reviews.utils import normalize_score
+from reviews.utils import (
+    normalize_score,
+    detect_language,
+    get_language_name_ja,
+    infer_nationality_from_language,
+)
 
 def scrape_rakuten_travel_reviews(
     url: str,
@@ -166,7 +171,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
         overall_score_original_text = review_element.find_element(
             By.CSS_SELECTOR, "span.rate"
         ).text.strip()
-   
+
         normalized_overall_score = normalize_score(
             original_score=overall_score_original_text,
             original_scale=original_score_scale,
@@ -218,6 +223,9 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             By.CSS_SELECTOR, "p.commentSentence"
         ).text.strip()
 
+        language_code = detect_language(comment_text)
+        language_name = get_language_name_ja(language_code)
+        nationality_info = infer_nationality_from_language(language_code)
         # --- 旅行目的、同伴者、宿泊年月の抽出 ---
         purpose_items = review_element.find_elements(
             By.CSS_SELECTOR, "dl.commentPurpose dt, dl.commentPurpose dd"
@@ -288,6 +296,10 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             "purpose_of_visit_original": original_purpose,
             "room_type": normalized_room_type,
             "room_type_original": original_room_type,
+            "language_code": language_code,
+            "review_language": language_name,
+            "nationality_region": nationality_info.get("major"),
+            "nationality_country": nationality_info.get("minor"),
         }
         return review_data
 

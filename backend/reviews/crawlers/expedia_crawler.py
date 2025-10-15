@@ -2,6 +2,7 @@ import time
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import undetected_chromedriver as uc
@@ -100,7 +101,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
             # 5秒待っても表示されなければ、ポップアップは無いと判断して次に進む
             print("日付選択ポップアップは表示されませんでした。")
 
-        # 2. "口コミをすべて表示" をクリックしてレビュー表示
+        # "口コミをすべて表示" をクリックしてレビュー表示
         try:
             print("「口コミをすべて表示」ボタンを探しています...")
             show_reviews_button = wait.until(
@@ -110,9 +111,32 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
             )
             print("ボタンをクリックして口コミを表示します。")
             show_reviews_button.click()
+            time.sleep(2)
         except TimeoutException:
             print("「口コミをすべて表示」ボタンが表示されませんでした。")
 
+        try:
+            print("並び替え用のドロップダウンを探しています...")
+
+            sort_dropdown_element = wait.until(
+                EC.presence_of_element_located((By.ID, "sortBy"))
+            )
+            print("ドロップダウンが見つかりました。")
+            select_object = Select(sort_dropdown_element)
+
+            # 表示されているテキスト「新着順」を指定して選択する
+            select_object.select_by_value("urn:expediagroup:taxonomies:filters:reviews:sort_by_date")
+
+            print("並び替えを「新着順」に変更しました。")
+
+            # 並び替えが実行され、レビューリストが再読み込みされるのを待つ
+            # time.sleep(3)
+
+        except TimeoutException:
+            print("並び替え用のドロップダウンが見つかりませんでした。")
+        except Exception as e:
+            print(f"並び替え中に予期せぬエラーが発生しました: {e}")
+            
         # 口コミモーダルが表示され、最初の口コミが読み込まれるまで待機
         print("口コミの読み込みを待っています...")
         wait.until(

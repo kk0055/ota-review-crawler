@@ -83,47 +83,75 @@ class DataNormalizer:
         common_map = maps_dict["common"]
         return common_map.get(original_value, "その他")
 
-    def _normalize_single_tag(self, tag, maps, ota_name=None):
-        """1つのタグを正規化する内部関数"""
-        ota_map = maps["ota_specific"].get(ota_name, {})
-        normalized = ota_map.get(tag)
-        if normalized:
-            return normalized
-        return maps["common"].get(tag)
+    @lru_cache(maxsize=32)
+    def _get_normalization_patterns(self, map_key, ota_name=None):
+        """
+        【新しいヘルパー関数】
+        YAMLマップから(パターン, 正規化後の値)のタプルリストを生成し、
+        パターン長で降順ソートして返す。
+        """
+        maps = getattr(self, map_key)  # self.traveler_type_mapsなどを動的に取得
+
+        pattern_list = []
+
+        # 1. 共通のパターンを追加
+        for norm_value, raw_tags in maps.get("common", {}).items():
+            for raw_tag in raw_tags:
+                pattern_list.append((raw_tag, norm_value))
+
+        # 2. OTA固有のパターンを追加
+        if ota_name:
+            ota_map = maps.get("ota_specific", {}).get(ota_name, {})
+            for norm_value, raw_tags in ota_map.items():
+                for raw_tag in raw_tags:
+                    pattern_list.append((raw_tag, norm_value))
+
+        # 3. パターンの文字数が長い順（より具体的）にソート
+        pattern_list.sort(key=lambda x: len(x[0]), reverse=True)
+        return pattern_list
 
     def normalize_from_tags(self, tags_input, ota_name=None):
+        """
+        【修正版】タグのリストまたは文字列から、旅行タイプと目的を正規化する。
+        部分一致検索ロジックに変更。
+        """
         if not tags_input:
             return {"traveler_type": None, "purpose": None}
 
-        tags = []
+        # 入力がリストでも文字列でも、最終的に1つの検索対象文字列に統一する
+        search_text = ""
         if isinstance(tags_input, str):
-            delimiters = r"[、, 　]+"
-            tags = [
-                tag.strip() for tag in re.split(delimiters, tags_input) if tag.strip()
-            ]
+            search_text = tags_input
         elif isinstance(tags_input, list):
-            tags = [str(tag).strip() for tag in tags_input if tag]
+            search_text = ", ".join(map(str, tags_input))
 
-        if not tags:
+        if not search_text.strip():
             return {"traveler_type": None, "purpose": None}
 
-        found_traveler_types = {
-            self._normalize_single_tag(tag, self.traveler_type_maps, ota_name)
-            for tag in tags
-        }
-        found_purposes = {
-            self._normalize_single_tag(tag, self.purpose_maps, ota_name) for tag in tags
-        }
+        # ソート済みのパターンリストを取得
+        traveler_patterns = self._get_normalization_patterns(
+            "traveler_type_maps", ota_name
+        )
+        purpose_patterns = self._get_normalization_patterns("purpose_maps", ota_name)
 
-        # Noneが含まれていれば除去
-        found_traveler_types.discard(None)
-        found_purposes.discard(None)
+        # 部分一致でマッチするものをすべて発見する
+        found_traveler_types = set()
+        for pattern, norm_value in traveler_patterns:
+            if pattern in search_text:
+                found_traveler_types.add(norm_value)
 
+        found_purposes = set()
+        for pattern, norm_value in purpose_patterns:
+            if pattern in search_text:
+                found_purposes.add(norm_value)
+
+        # --- ここから下の優先度決定ロジックは変更なし ---
         result_traveler_type = None
         for priority_type in TRAVELER_TYPE_PRIORITY:
             if priority_type in found_traveler_types:
                 result_traveler_type = priority_type
                 break
+
         result_purpose = (
             "ビジネス"
             if "ビジネス" in found_purposes
