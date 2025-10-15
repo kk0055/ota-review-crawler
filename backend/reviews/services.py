@@ -5,35 +5,60 @@ from datetime import datetime
 import re
 import hashlib
 import pandas as pd
-from .models import Review, CrawlTarget, Ota, Hotel
+from .models import Review, CrawlTarget, ReviewScore, Hotel
 from .crawlers.expedia_crawler import scrape_expedia_reviews
 from .crawlers.rakuten_travel_crawler import scrape_rakuten_travel_reviews
 import logging
 from decimal import Decimal, InvalidOperation
+from django.db import transaction
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
+# EXCEL_HEADER_MAP = {
+#     # "ホテルID": "hotel_id",
+#     "投稿月日": "review_date",
+#     "OTA": "crawl_target__ota__name",
+#     "ユーザー名": "reviewer_name",
+#     "国籍_大分類": "nationality_region",
+#     "国籍_小分類": "nationality_country",
+#     "言語": "review_language",
+#     "部屋": "room_type",
+#     "目的": "purpose_of_visit",
+#     "形態": "traveler_type",
+#     "性別": "gender",
+#     "年代": "age_group",
+#     "総合スコア": "overall_score",
+#     "口コミ": "review_comment",
+#     "口コミ(翻訳済)": "translated_review_comment",
+# }
 EXCEL_HEADER_MAP = {
-    # "ホテルID": "hotel_id",
-    "投稿月日": "review_date",
-    "OTA": "crawl_target__ota__name",
-    "ユーザー名": "reviewer_name",
-    "国籍_大分類": "nationality_region",
-    "国籍_小分類": "nationality_country",
-    "言語": "review_language",
-    "部屋": "room_type",
-    "目的": "purpose_of_visit",
-    "形態": "traveler_type",
-    "性別": "gender",
-    "年代": "age_group",
-    "総合スコア": "overall_score",
-    "口コミ": "review_comment",
-    "口コミ(翻訳済)": "translated_review_comment",
+    # Reviewモデルから取得するフィールド
+    "review_date": "投稿月日",
+    "ota_name": "OTA",
+    "reviewer_name": "ユーザー名",
+    "nationality_region": "国籍_大分類",
+    "nationality_country": "国籍_小分類",
+    "review_language": "言語",
+    "room_type": "部屋",
+    "purpose_of_visit": "目的",
+    "traveler_type": "旅行形態",
+    "gender": "性別",
+    "age_group": "年代",
+    "review_comment": "口コミ本文",
+    "translated_review_comment": "口コミ(翻訳済)",
+    "overall_score": "総合評価",
+    # ReviewScoreからピボットして生成されるフィールド (enumのキーと一致させる)
+    "LOCATION": "立地",
+    "SERVICE": "サービス",
+    "CLEANLINESS": "清潔感",
+    "FACILITIES": "施設",
+    "ROOM": "客室",
+    "BATH": "風呂",
+    # "FOOD": "食事",
 }
-
 
 def run_crawl_and_save(
     target: CrawlTarget, start_date: str, end_date: str, hotel_slug: str
@@ -66,7 +91,7 @@ def run_crawl_and_save(
         if not reviews_list:
             return True, "口コミは取得されませんでした。"
 
-        # save_reviews_to_db(reviews_list, target)
+        save_reviews_to_db(reviews_list, target)
 
         message = f"正常に処理完了。取得件数: {len(reviews_list)}"
         return True, message
@@ -89,41 +114,81 @@ def get_reviews_as_dataframe(
     """
     print(f"--- [Service] Function started. Searching for hotel: '{hotel_name}' ---")
     try:
-        # 1. まずホテル名で Hotel マスターモデルを取得する
         hotel_master = Hotel.objects.get(name=hotel_name)
     except Hotel.DoesNotExist:
-        # マスターが存在しない場合は、空のDataFrameを返す
         return pd.DataFrame()
 
     targets = CrawlTarget.objects.filter(hotel=hotel_master)
-
     if ota_ids:
         targets = targets.filter(ota__id__in=ota_ids)
 
-    if not targets.exists():
-        print("--- [Service] No target hotels found. Returning empty DataFrame. ---")
-        return pd.DataFrame()
-
-    reviews = Review.objects.filter(crawl_target__in=targets)
-
+    reviews_query = Review.objects.filter(crawl_target__in=targets)
     # 日付範囲の指定があれば、それでさらにフィルタリング
     if start_date:
-        reviews = reviews.filter(review_date__gte=start_date)
+        reviews_query = reviews_query.filter(review_date__gte=start_date)
     if end_date:
-        reviews = reviews.filter(review_date__lte=end_date)
+        reviews_query = reviews_query.filter(review_date__lte=end_date)
 
-    if not reviews.exists():
+    reviews_query = reviews_query.select_related("crawl_target__ota")
+
+    review_values = list(
+        reviews_query.values(
+            "id",
+            "review_date",
+            "crawl_target__ota__name", 
+            "reviewer_name",
+            "nationality_region",
+            "nationality_country",
+            "review_language",
+            "room_type",
+            "purpose_of_visit",
+            "traveler_type",
+            "gender",
+            "age_group",
+            "review_comment",
+            "translated_review_comment",
+            "overall_score",
+        )
+    )
+
+    if not review_values:
+        print("--- [Service] No reviews found. Returning empty DataFrame. ---")
         return pd.DataFrame()
 
-    fields_to_get = list(EXCEL_HEADER_MAP.values())
-    review_list = list(reviews.values(*fields_to_get))
-    df = pd.DataFrame(review_list)
+    df_reviews = pd.DataFrame(review_values)
+    # 分かりやすいようにカラム名を変更
+    df_reviews.rename(columns={"crawl_target__ota__name": "ota_name"}, inplace=True)
+
+    review_ids = df_reviews['id'].tolist()
+    score_values = list(ReviewScore.objects.filter(review_id__in=review_ids).values(
+        'review_id', 'category', 'score'
+    ))
+
+    if score_values:
+        df_scores = pd.DataFrame(score_values)
+        df_scores_pivot = df_scores.pivot_table(
+            index='review_id', columns='category', values='score'
+        ).reset_index()
+
+        df = pd.merge(df_reviews, df_scores_pivot, left_on='id', right_on='review_id', how='left')
+        df.drop(columns=['id', 'review_id'], inplace=True)
+    else:
+        df = df_reviews.drop(columns=['id'])
 
     # カラム名を日本語ヘッダーにリネーム
-    rename_map = {v: k for k, v in EXCEL_HEADER_MAP.items()}
-    df.rename(columns=rename_map, inplace=True)
+    df.rename(columns=EXCEL_HEADER_MAP, inplace=True)
+    print("--- [Debug] DataFrame columns after rename ---")
+    print(df.columns.tolist())
+    
+    expected_columns_jp = list(EXCEL_HEADER_MAP.values())
+    
+    final_columns_order = [
+        jp_name for jp_name in expected_columns_jp if jp_name in df.columns
+    ]
+
+    df = df[final_columns_order]
+
     print(f"--- [Service] Data found. Returning DataFrame with {len(df)} rows. ---")
-    df = df[list(EXCEL_HEADER_MAP.keys())]
     return df
 
 
@@ -141,60 +206,95 @@ def save_reviews_to_db(reviews_list, crawl_target: CrawlTarget):
     """取得したレビューのリストをデータベースに保存/更新します。"""
     logging.info(f"  取得した {len(reviews_list)} 件の口コミをDBに保存します...")
     saved_count, updated_count, skipped_count = 0, 0, 0
-    model_field_names = {f.name for f in Review._meta.get_fields()}
+
+    SCORE_MAPPING = {
+        "location": ReviewScore.ScoreCategory.LOCATION,
+        "service": ReviewScore.ScoreCategory.SERVICE,
+        "cleanliness": ReviewScore.ScoreCategory.CLEANLINESS,
+        "facilities": ReviewScore.ScoreCategory.FACILITIES,
+        "room": ReviewScore.ScoreCategory.ROOM,
+        "bath": ReviewScore.ScoreCategory.BATH,
+        "food": ReviewScore.ScoreCategory.FOOD,
+    }
+    review_model_fields = {f.name for f in Review._meta.get_fields()}
 
     for review_data in reviews_list:
         try:
 
-            # 【ハッシュ生成】
-            # 欠損したり変更されたりする可能性が低い、安定したコア情報のみでハッシュを構成する。
-            # これにより、2回目にクロールした際に一部情報が欠損しても、同じレビューとして特定できる。
-            source_string = (
-                f"{crawl_target.id}-"
-                f"{review_data.get('reviewer_name', '')}-"
-                f"{review_data.get('review_date', '')}-"
-                f"{review_data.get('overall_score_original', '')}-"
-                f"{review_data.get('review_comment', '')}"
-            )
-            review_hash = hashlib.sha256(source_string.encode("utf-8")).hexdigest()
+            with transaction.atomic():
+                # 【ハッシュ生成】
+                # 欠損したり変更されたりする可能性が低い、安定したコア情報のみでハッシュを構成する。
+                # これにより、2回目にクロールした際に一部情報が欠損しても、同じレビューとして特定できる。
+                source_string = (
+                    f"{crawl_target.id}-"
+                    f"{review_data.get('reviewer_name', '')}-"
+                    f"{review_data.get('review_date', '')}-"
+                    f"{review_data.get('overall_score_original', '')}-"
+                    f"{review_data.get('review_comment', '')}"
+                )
+                review_hash = hashlib.sha256(source_string.encode("utf-8")).hexdigest()
 
-            # review_dataからモデルに存在するフィールドを抽出し、
-            # さらに「値がNoneでない」ものだけをdefaults辞書に含める
-            defaults = {
-                key: value
-                for key, value in review_data.items()
-                if key in model_field_names and value is not None
-            }
+                review_defaults = {}
+                score_data = {}
 
-            defaults["crawl_target"] = crawl_target
+                for key, value in review_data.items():
+                    if value is None:
+                        continue # 値がNoneのデータは無視
 
-            for key, value in defaults.items():
-                if "_normalized" in key:  
-                    try:
-                        defaults[key] = Decimal(str(value))
-                    except InvalidOperation:
-                        logging.warning(
-                            f"  '{key}' の値 '{value}' をDecimalに変換できません。Noneに設定します。"
-                        )
-                        defaults[key] = (
-                            None  
-                        )
+                    # スコア関連のキーかどうかを判定
+                    is_score_field = False
+                    for prefix in SCORE_MAPPING.keys():
+                        if key.startswith(prefix + "_score"):
+                            score_data[key] = value
+                            is_score_field = True
+                            break
 
-            # review_hashをキーに、DBに保存/更新
-            _obj, created = Review.objects.update_or_create(
-                review_hash=review_hash,
-                defaults=defaults,
-            )
+                    # スコア関連でなければ、Reviewモデルのフィールドかチェック
+                    if not is_score_field and key in review_model_fields:
+                        review_defaults[key] = value
 
-            if created:
-                saved_count += 1
-            else:
-                updated_count += 1
+                review_defaults["crawl_target"] = crawl_target
+                # ※正規化済みの総合評価(overall_score)はreview_defaultsに含まれる
+
+                # ---  Reviewオブジェクトの保存/更新 ---
+                review_obj, created = Review.objects.update_or_create(
+                    review_hash=review_hash,
+                    defaults=review_defaults,
+                )
+
+                # --- ReviewScoreオブジェクトの保存/更新 ---
+                # 存在する場合のみ、カテゴリ別にスコアを保存
+                for prefix, category_enum in SCORE_MAPPING.items():
+                    score_key = f"{prefix}_score"
+                    original_key = f"{prefix}_score_original"
+
+                    # 正規化済みスコアが存在する場合のみ処理
+                    if score_key in score_data:
+                        try:
+                            normalized_score = Decimal(str(score_data[score_key]))
+                            original_score = score_data.get(original_key, '')
+
+                            ReviewScore.objects.update_or_create(
+                                review=review_obj,
+                                category=category_enum,
+                                defaults={
+                                    'score': normalized_score,
+                                    'score_original': original_score
+                                }
+                            )
+                        except InvalidOperation:
+                            logging.warning(
+                                f"  '{score_key}' の値 '{score_data[score_key]}' をDecimalに変換できませんでした。スキップします。"
+                            )
+
+                # --- カウント処理 ---
+                if created:
+                    saved_count += 1
+                else:
+                    updated_count += 1
 
         except Exception as e:
-            logging.warning(
-                f"    DB保存エラー: {e} スキップします. データ: {review_data}"
-            )
+            logging.error(f"    DB保存中に致命的なエラー: {e}。このレビューの処理をスキップします. データ: {review_data}")
             skipped_count += 1
 
     logging.info(

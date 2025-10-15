@@ -3,6 +3,7 @@ from django.utils import timezone
 import hashlib
 import uuid
 from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
 
 # -----------------------------------------------------------------------------
 # 1. OTAモデル: OTAサイトのマスター情報を管理
@@ -240,66 +241,6 @@ class Review(models.Model):
         "総合評価点（取得元オリジナル）", max_length=10, null=True, blank=True
     )  # 元のデータが数値以外の場合も考慮しCharFieldも選択肢
 
-    # 立地スコア
-    location_score = models.DecimalField(
-        "立地スコア（正規化済）", max_digits=3, decimal_places=1, null=True, blank=True
-    )
-    location_score_original = models.CharField(
-        "立地スコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
-    # サービススコア
-    service_score = models.DecimalField(
-        "サービススコア（正規化済）",
-        max_digits=3,
-        decimal_places=1,
-        null=True,
-        blank=True,
-    )
-    service_score_original = models.CharField(
-        "サービススコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
-    # 清潔感スコア
-    cleanliness_score = models.DecimalField(
-        "清潔感スコア（正規化済）",
-        max_digits=3,
-        decimal_places=1,
-        null=True,
-        blank=True,
-    )
-    cleanliness_score_original = models.CharField(
-        "清潔感スコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
-    # 施設スコア
-    facilities_score = models.DecimalField(
-        "施設スコア（正規化済）", max_digits=3, decimal_places=1, null=True, blank=True
-    )
-    facilities_score_original = models.CharField(
-        "施設スコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
-    # 食事スコア
-    food_score = models.DecimalField(
-        "食事スコア（正規化済）", max_digits=3, decimal_places=1, null=True, blank=True
-    )
-    food_score_original = models.CharField(
-        "食事スコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
-    # コスパスコア
-    price_performance_score = models.DecimalField(
-        "コスパスコア（正規化済）",
-        max_digits=3,
-        decimal_places=1,
-        null=True,
-        blank=True,
-    )
-    price_performance_score_original = models.CharField(
-        "コスパスコア（オリジナル）", max_length=10, null=True, blank=True
-    )
-
     # --- 口コミ本文 ---
     review_title = models.CharField(
         "口コミタイトル", max_length=255, null=True, blank=True
@@ -315,20 +256,36 @@ class Review(models.Model):
     translated_review_comment = models.TextField(
         "翻訳した口コミ本文", null=True, blank=True
     )
-    location_comment = models.TextField("立地に関するコメント", null=True, blank=True)
-    service_comment = models.TextField(
-        "サービスに関するコメント", null=True, blank=True
-    )
-    cleanliness_comment = models.TextField(
-        "清潔感に関するコメント", null=True, blank=True
-    )
-    facilities_comment = models.TextField("施設に関するコメント", null=True, blank=True)
-    room_comment = models.TextField("客室に関するコメント", null=True, blank=True)
-    bath_comment = models.TextField("風呂に関するコメント", null=True, blank=True)
-    food_comment = models.TextField("食事全般に関するコメント", null=True, blank=True)
-    breakfast_comment = models.TextField("朝食に関するコメント", null=True, blank=True)
-    dinner_comment = models.TextField("夕食に関するコメント", null=True, blank=True)
-
+    
+    # location_comment = models.TextField("立地に関するコメント", null=True, blank=True)
+    # service_comment = models.TextField(
+    #     "サービスに関するコメント", null=True, blank=True
+    # )
+    # cleanliness_comment = models.TextField(
+    #     "清潔感に関するコメント", null=True, blank=True
+    # )
+    # facilities_comment = models.TextField("施設に関するコメント", null=True, blank=True)
+    # room_comment = models.TextField("客室に関するコメント", null=True, blank=True)
+    # bath_comment = models.TextField("風呂に関するコメント", null=True, blank=True)
+    # food_comment = models.TextField("食事全般に関するコメント", null=True, blank=True)
+    # breakfast_comment = models.TextField("朝食に関するコメント", null=True, blank=True)
+    # dinner_comment = models.TextField("夕食に関するコメント", null=True, blank=True)
+    # price = models.DecimalField(
+    #     "価格",
+    #     max_digits=10,
+    #     decimal_places=2,
+    #     null=True,
+    #     blank=True,
+    #     help_text="予約時の価格。通貨はcurrencyフィールドで指定。",
+    # )
+    # currency = models.CharField(
+    #     "通貨",
+    #     max_length=3,
+    #     null=True,
+    #     blank=True,
+    #     help_text="価格の通貨コード (例: JPY, USD)",
+    # )
+    
     # --- 予約情報 (取得できない場合を考慮し、nullを許可) ---
     room_type = models.CharField(
         "部屋タイプ（正規化済）", max_length=255, null=True, blank=True, db_index=True
@@ -336,21 +293,7 @@ class Review(models.Model):
     room_type_original = models.CharField(
         "部屋タイプ（取得元オリジナル）", max_length=255, null=True, blank=True
     )
-    price = models.DecimalField(
-        "価格",
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="予約時の価格。通貨はcurrencyフィールドで指定。",
-    )
-    currency = models.CharField(
-        "通貨",
-        max_length=3,
-        null=True,
-        blank=True,
-        help_text="価格の通貨コード (例: JPY, USD)",
-    )
+
     # --- 日時情報 ---
     stay_date = models.DateField(
         "宿泊年月",
@@ -372,3 +315,38 @@ class Review(models.Model):
 
         display_id = self.review_id_in_ota or f"hash:{self.review_hash[:7]}"
         return f"Review ({display_id}) for {self.crawl_target.hotel.name} on {self.crawl_target.ota.name}"
+
+
+class ReviewScore(models.Model):
+    """口コミに紐づく、カテゴリ別の詳細な評価スコアを格納するモデル"""
+
+    class ScoreCategory(models.TextChoices):
+        LOCATION = "LOCATION", _("立地")
+        SERVICE = "SERVICE", _("サービス")
+        CLEANLINESS = "CLEANLINESS", _("清潔感")
+        FACILITIES = "FACILITIES", _("施設")
+        ROOM = "ROOM", _("客室")
+        BATH = "BATH", _("風呂")
+        FOOD = "FOOD", _("食事")
+        # PRICE_PERFORMANCE = "PRICE_PERFORMANCE", _("コスパ")
+
+    review = models.ForeignKey(
+        Review,
+        on_delete=models.CASCADE,
+        related_name="scores",  # review.scores.all() のように逆参照できる
+        verbose_name="関連レビュー",
+    )
+    category = models.CharField(
+        "評価項目", max_length=20, choices=ScoreCategory.choices
+    )
+    score = models.DecimalField("スコア（正規化済）", max_digits=3, decimal_places=1)
+    score_original = models.CharField("スコア（オリジナル）", max_length=10)
+
+    class Meta:
+        verbose_name = "評価スコア詳細"
+        verbose_name_plural = "評価スコア詳細"
+        # 1つのレビューに同じカテゴリのスコアが複数登録されないように制約をかける
+        unique_together = ("review", "category")
+
+    def __str__(self):
+        return f"{self.review} - {self.get_category_display()}: {self.score}"
