@@ -103,7 +103,7 @@ class DataNormalizer:
             ]
         elif isinstance(tags_input, list):
             tags = [str(tag).strip() for tag in tags_input if tag]
-            
+
         if not tags:
             return {"traveler_type": None, "purpose": None}
 
@@ -139,23 +139,46 @@ class DataNormalizer:
         return {"traveler_type": result_traveler_type, "purpose": result_purpose}
 
     @lru_cache(maxsize=128)
-    def _get_room_type_inverse_map(self, hotel_slug, ota_name):
-        """【内部ヘルパー】部屋名逆引きマップを必要に応じて生成し、キャッシュする。"""
+    def _get_sorted_pattern_list(self, hotel_slug, ota_name):
+        """
+        【内部ヘルパー/修正版】
+        正規化のための「(パターン, 正規化名)」のタプルリストを生成し、
+        パターンの文字数が長い順（より具体的なルールが先）にソートしてキャッシュする。
+        """
         try:
             hotel_ota_map = self.config["room_type"][hotel_slug][ota_name]
-            return {
-                orig: norm
-                for norm, orig_list in hotel_ota_map.items()
-                for orig in orig_list
-            }
+
+            # (パターン, 正規化名) のリストを作成
+            pattern_list = [
+                (pattern, norm_name)
+                for norm_name, patterns in hotel_ota_map.items()
+                for pattern in patterns
+            ]
+
+            # パターンの文字数が長い順（降順）でソートする。これが非常に重要！
+            # これにより "エグゼクティブツイン" が "ツイン" より先に評価される。
+            pattern_list.sort(key=lambda x: len(x[0]), reverse=True)
+
+            return pattern_list
+
         except KeyError:
-            return {}
+            return []
 
     def normalize_room_type(self, original_room_name, hotel_slug, ota_name):
         """
-        元の部屋名を、ホテルとOTAに合わせて正規化する。
+        元の部屋名を、ホテルとOTAに合わせて正規化する（部分一致）。
         """
         if not all([original_room_name, hotel_slug, ota_name]):
             return original_room_name
-        inverse_map = self._get_room_type_inverse_map(hotel_slug, ota_name)
-        return inverse_map.get(original_room_name, original_room_name)
+
+        # ソート済みのパターンリストを取得
+        sorted_patterns = self._get_sorted_pattern_list(hotel_slug, ota_name)
+
+        # パターンが元の部屋名に含まれているかをチェック
+        for pattern, normalized_name in sorted_patterns:
+            if pattern in original_room_name:
+                # 最初に見つかったマッチを返す（具体的なものが先に評価される）
+                return normalized_name
+
+        # どのパターンにもマッチしなかった場合は、元の名前をそのまま返す
+        return original_room_name

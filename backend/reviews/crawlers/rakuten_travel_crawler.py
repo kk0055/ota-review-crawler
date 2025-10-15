@@ -235,8 +235,8 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             room_type_element = review_element.find_element(
                 By.XPATH, ".//dt[text()='ご利用のお部屋']/following-sibling::dd[1]"
             )
-            # original_room_type = room_type_element.text.strip().strip("【】")
-            original_room_type = room_type_element.text.strip()
+            original_room_type = room_type_element.text.strip().strip("【】")
+            # original_room_type = room_type_element.text.strip()
         except NoSuchElementException:
             print("    [情報] この口コミには「ご利用のお部屋」情報がありませんでした。")
             pass
@@ -265,9 +265,6 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             original_purpose or original_traveler_type, ota_name
         )
         print("-" * 20)
-        print(f"DEBUG: hotel_id = {repr(hotel_id)}")
-        print(f"DEBUG: ota_name = {repr(ota_name)}")
-        print(f"DEBUG: original_room_type (正規化前) = {repr(original_room_type)}")
 
         normalized_room_type = normalizer.normalize_room_type(
             original_room_type, hotel_id, ota_name

@@ -23,9 +23,11 @@ from rest_framework import status
 # -----------------------------------------------------------------------------
 class OtaListView(ListAPIView):
     """
-    登録されている全てのOTAを一覧表示するためのAPIビュー
+    有効なOTAサイトを、表示順で一覧表示するためのAPIビュー
+    is_active=True のもののみを返します。
     """
-    queryset = Ota.objects.all().order_by("name")  
+    # is_active=True でフィルターし、display_orderで並び替え
+    queryset = Ota.objects.filter(is_active=True).order_by("display_order")
     serializer_class = OtaSerializer
 
 

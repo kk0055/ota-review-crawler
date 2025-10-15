@@ -23,6 +23,16 @@ class Ota(models.Model):
         null=True,
         blank=True,
     )
+    display_order = models.PositiveIntegerField(
+        "表示順",
+        default=0,
+        help_text="数字が小さい順に表示されます",
+    )
+    is_active = models.BooleanField(
+        "表示フラグ",
+        default=True,
+        help_text="チェックを外すとサイトに表示されなくなります",
+    )
 
     created_at = models.DateTimeField("登録日時", auto_now_add=True)
     updated_at = models.DateTimeField("更新日時", auto_now=True)
@@ -30,6 +40,7 @@ class Ota(models.Model):
     class Meta:
         verbose_name = "OTAサイト"
         verbose_name_plural = "OTAサイト"
+        ordering = ["display_order", "pk"] 
 
     def __str__(self):
         return self.name
