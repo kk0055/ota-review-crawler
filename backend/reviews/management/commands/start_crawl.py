@@ -104,35 +104,30 @@ class Command(BaseCommand):
                 f"(Hotel ID: {hotel_master.id}, CrawlTarget ID: {target.id})"
             )
             target.last_crawl_status = CrawlTarget.CrawlStatus.PENDING
+            target.last_crawl_message = "クロール処理を待機中です..."
             target.save()
+            
+            try:
+                success, message = run_crawl_and_save(
+                    target, start_date, end_date, hotel_slug=hotel_master.slug
+                )
 
-            success, message = run_crawl_and_save(
-                target, start_date, end_date, hotel_slug=hotel_master.slug
-            )
+                target.last_crawl_status = (
+                    CrawlTarget.CrawlStatus.SUCCESS
+                    if success
+                    else CrawlTarget.CrawlStatus.FAILURE
+                )
+                target.last_crawl_message = message
+                target.last_crawled_at = timezone.now()
+                target.save()
+                self.stdout.write(f"  結果: {message}")
+            except Exception as e:
+                    target.last_crawl_status = CrawlTarget.CrawlStatus.FAILURE
+                    target.last_crawl_message = f"コマンド実行中に予期せぬエラーが発生: {str(e)}"
+                    self.stdout.write(self.style.ERROR(f"  エラー: {e}"))
+            finally:
 
-            target.last_crawl_status = (
-                CrawlTarget.CrawlStatus.SUCCESS
-                if success
-                else CrawlTarget.CrawlStatus.FAILURE
-            )
-            target.last_crawl_message = message
-            target.last_crawled_at = timezone.now()
-            target.save()
-            self.stdout.write(f"  結果: {message}")
-
-        # if should_export_excel:
-        #     self.stdout.write("\n▶ Excelファイルを作成します...")
-
-        #     df = get_reviews_as_dataframe(hotel_name, otas)
-
-        #     if df.empty:
-        #         self.stdout.write(
-        #             self.style.WARNING("  Excel出力対象のデータがありません。")
-        #         )
-        #     else:
-        #         # コマンド実行時はディスクにファイルを保存
-        #         export_dataframe_to_excel(
-        #             df=df, base_filename=hotel_name, stdout_writer=self
-        #         )
-
-        # self.stdout.write(self.style.SUCCESS("\n--- 全ての処理が完了しました ---"))
+                    target.last_crawled_at = timezone.now()
+                    target.save()
+        
+        self.stdout.write(self.style.SUCCESS("\n--- 全ての処理が完了しました。 ---"))

@@ -282,7 +282,6 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                         "translated_review_comment": translated_review_comment.strip(),
                         "language_code": language_code,
                         "review_language": language_name,
-
                     }
 
                     all_reviews_data.append(review_data)
@@ -300,9 +299,6 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                     )
                     print(f"  投稿日: {review_data['review_date']}")
                     print(f"  言語: {review_data['review_language']}")
-                    print(
-                        f"  国籍: {review_data['nationality_region']} - {review_data['nationality_country']}"
-                    )
                     print(f"  本文: {review_data['review_comment'][:50]}...")
                     print(f"  言語コード: {review_data['language_code']}")
                     if review_data[

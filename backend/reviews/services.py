@@ -17,30 +17,13 @@ logging.basicConfig(
 )
 
 
-# EXCEL_HEADER_MAP = {
-#     # "ホテルID": "hotel_id",
-#     "投稿月日": "review_date",
-#     "OTA": "crawl_target__ota__name",
-#     "ユーザー名": "reviewer_name",
-#     "国籍_大分類": "nationality_region",
-#     "国籍_小分類": "nationality_country",
-#     "言語": "review_language",
-#     "部屋": "room_type",
-#     "目的": "purpose_of_visit",
-#     "形態": "traveler_type",
-#     "性別": "gender",
-#     "年代": "age_group",
-#     "総合スコア": "overall_score",
-#     "口コミ": "review_comment",
-#     "口コミ(翻訳済)": "translated_review_comment",
-# }
 EXCEL_HEADER_MAP = {
     # Reviewモデルから取得するフィールド
     "review_date": "投稿月日",
     "ota_name": "OTA",
     "reviewer_name": "ユーザー名",
-    "nationality_region": "国籍_大分類",
-    "nationality_country": "国籍_小分類",
+    # "nationality_region": "国籍_大分類",
+    # "nationality_country": "国籍_小分類",
     "review_language": "言語",
     "room_type": "部屋",
     "purpose_of_visit": "目的",
@@ -137,8 +120,6 @@ def get_reviews_as_dataframe(
             "review_date",
             "crawl_target__ota__name", 
             "reviewer_name",
-            "nationality_region",
-            "nationality_country",
             "review_language",
             "room_type",
             "purpose_of_visit",
@@ -177,8 +158,6 @@ def get_reviews_as_dataframe(
 
     # カラム名を日本語ヘッダーにリネーム
     df.rename(columns=EXCEL_HEADER_MAP, inplace=True)
-    print("--- [Debug] DataFrame columns after rename ---")
-    print(df.columns.tolist())
     
     expected_columns_jp = list(EXCEL_HEADER_MAP.values())
     

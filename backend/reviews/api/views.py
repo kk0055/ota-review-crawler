@@ -5,7 +5,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.core.management import call_command
-import threading
 from reviews.services import get_reviews_as_dataframe, generate_excel_in_memory
 from django.http import HttpResponse
 import io
@@ -16,7 +15,11 @@ from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
+import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from django.core.management import call_command
+from django.db import connection
 
 # -----------------------------------------------------------------------------
 # API Views
@@ -41,10 +44,36 @@ class HotelListAPIView(ListAPIView):
     serializer_class = HotelSerializer
 
 
+# サーバー全体で1つのスレッドプールを共有します。
+# サーバーのスペックに合わせて調整します。
+# max_workers=5 は「同時に実行する重い処理は最大5つまで」
+thread_pool = ThreadPoolExecutor(max_workers=5)
+
+
+def _command_wrapper(command_name, *args):
+    """
+    call_commandをラップし、エラーハンドリングとDB接続管理を行う。
+    この関数がスレッドで直接実行される。
+    """
+    try:
+        print(f"Starting command '{command_name}' in thread...")
+        call_command(command_name, *args)
+        print(f"Finished command '{command_name}' successfully.")
+    except Exception as e:
+        # スレッド内で発生した例外をログに記録する
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Error executing command '{command_name}' in thread with args {args}",
+            exc_info=True,  
+        )
+    finally:
+        # 処理が成功しても失敗しても、必ずDB接続を閉じる。
+        connection.close()
+
+
 def run_command_in_thread(command_name, *args, **kwargs):
     """
-    Djangoのコマンドを別スレッドで実行するためのヘルパー関数
-    位置引数とキーワード引数を適切に処理する
+    Djangoのコマンドをスレッドプールを使って安全に実行する
     """
     cmd_args = list(args)
     for key, value in kwargs.items():
@@ -53,16 +82,16 @@ def run_command_in_thread(command_name, *args, **kwargs):
                 cmd_args.append(f'--{key.replace("_", "-")}')
             elif isinstance(value, list):
                 cmd_args.append(f'--{key.replace("_", "-")}')
-                cmd_args.extend(value)
+                # リスト内の要素が数値の場合、文字列に変換する
+                cmd_args.extend(map(str, value))
             elif not isinstance(value, bool):
                 cmd_args.append(f'--{key.replace("_", "-")}')
                 cmd_args.append(str(value))
 
-    thread = threading.Thread(target=call_command, args=(command_name, *cmd_args))
-    thread.start()
+    thread_pool.submit(_command_wrapper, command_name, *cmd_args)
 
 
-class BaseCrawlerActionView(APIView):
+class StartCrawlerAPIView(APIView):
     """クロール/エクスポート処理の共通ロジックを持つ基底クラス"""
 
     export_only = False
@@ -110,14 +139,6 @@ class BaseCrawlerActionView(APIView):
                 {"error": "サーバー内部でエラーが発生しました。"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
-class StartCrawlerAPIView(BaseCrawlerActionView):
-    export_only = False
-
-
-class ExportFileAPIView(BaseCrawlerActionView):
-    export_only = True
 
 
 class CrawlStatusAPIView(APIView):
