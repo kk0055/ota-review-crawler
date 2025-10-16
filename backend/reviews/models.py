@@ -198,12 +198,12 @@ class Review(models.Model):
         "投稿者の表示名", max_length=255, null=True, blank=True
     )
 
-    nationality_region = models.CharField(
-        "国籍（大分類）", max_length=100, null=True, blank=True
-    )
-    nationality_country = models.CharField(
-        "国籍（小分類）", max_length=100, null=True, blank=True
-    )
+    # nationality_region = models.CharField(
+    #     "国籍（大分類）", max_length=100, null=True, blank=True
+    # )
+    # nationality_country = models.CharField(
+    #     "国籍（小分類）", max_length=100, null=True, blank=True
+    # )
     traveler_type = models.CharField(
         "旅行形態（正規化済）", max_length=50, null=True, blank=True, db_index=True
     )
@@ -227,7 +227,6 @@ class Review(models.Model):
         help_text="評価点の満点（例: 5, 10）",
     )
 
-    # 各スコアフィールドを「正規化済み」と「オリジナル」に分ける
     # 総合評価点 (10点満点に正規化)
     overall_score = models.DecimalField(
         "総合評価点（10点満点に正規化）",

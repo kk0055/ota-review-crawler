@@ -83,7 +83,7 @@ class BaseCrawlerActionView(APIView):
 
             # コマンドに渡す引数を準備
             command_kwargs = {
-                "ota_ids": options.get("otas"),
+                "ota_ids": options.get("ota_ids"),
                 "start_date": options.get("startDate"),
                 "end_date": options.get("endDate"),
             }
@@ -125,7 +125,21 @@ class CrawlStatusAPIView(APIView):
     def get(self, request, hotel_id):
         try:
             hotel_master = Hotel.objects.get(pk=hotel_id)
+            ota_ids_str = request.query_params.get('ota_ids')
+
+            # ベースとなるクエリセット
             targets = CrawlTarget.objects.filter(hotel=hotel_master)
+
+            if ota_ids_str:
+                try:
+                    # カンマ区切りの文字列を整数のリストに変換
+                    ota_ids = [int(id_str) for id_str in ota_ids_str.split(',')]
+                    targets = targets.filter(ota_id__in=ota_ids)
+                except (ValueError, TypeError):
+                    return Response(
+                        {"error": "無効な ota_ids パラメータです。カンマ区切りの数値を指定してください。"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             serializer = CrawlTargetStatusSerializer(targets, many=True)
             return Response(serializer.data)
         except Hotel.DoesNotExist:
@@ -147,7 +161,7 @@ class ExportExcelAPIView(APIView):
         hotel_name = hotel_data.get("name") 
         selected_hotel_id = hotel_data.get("id")
         options_data = request.data.get("options", {})
-        otas_ids = options_data.get("otas")
+        otas_ids = options_data.get("ota_ids")
         start_date = options_data.get("startDate")
         end_date = options_data.get("endDate")
 

@@ -10,7 +10,7 @@ from datetime import datetime, date
 import logging
 from selenium import webdriver
 from ..normalizer import DataNormalizer
-from reviews.utils import detect_language, get_language_name_ja,infer_nationality_from_language
+from reviews.utils import detect_language, get_language_name_ja
 
 
 def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = None):
@@ -268,7 +268,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
 
                     language_code = detect_language(review_comment)
                     language_name = get_language_name_ja(language_code)
-                    nationality_info = infer_nationality_from_language(language_code)
+                   
 
                     review_data = {
                         "overall_score": overall_score,
@@ -282,8 +282,7 @@ def scrape_expedia_reviews(url, start_date_str: str = None, end_date_str: str = 
                         "translated_review_comment": translated_review_comment.strip(),
                         "language_code": language_code,
                         "review_language": language_name,
-                        "nationality_region": nationality_info.get("major"),
-                        "nationality_country": nationality_info.get("minor"),
+
                     }
 
                     all_reviews_data.append(review_data)

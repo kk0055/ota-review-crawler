@@ -24,7 +24,6 @@ import {
 import { DatePicker } from '@/components/DatePicker';
 import { format } from 'date-fns';
 
-
 interface ApiOta {
   id: number;
   name: string;
@@ -46,23 +45,20 @@ export default function CrawlerAdminPage() {
   );
   const [endDate, setEndDate] = useState<Date | undefined>();
 
+  const [selectedOtaIds, setSelectedOtaIds] = useState<number[]>([3, 4]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [pollingHotelId, setPollingHotelId] = useState<number | null>(null);
+
   // APIに渡す際に、Dateオブジェクトを 'yyyy-MM-dd' 形式の文字列に変換する必要がある
   const formatDate = (date: Date | undefined) => {
     return date ? format(date, 'yyyy-MM-dd') : null;
   };
-  const [selectedOtas, setSelectedOtas] = useState<Record<string, boolean>>({
-    3: true,
-    4: true,
-    rakuten: false,
-  });
-  const [isExporting, setIsExporting] = useState(false);
-  const [pollingHotelId, setPollingHotelId] = useState<number | null>(null);
-
+  
   const {
     statusData,
     isLoading: isPollingLoading,
     error: pollingError,
-  } = useCrawlStatusPoller({ hotelId: pollingHotelId });
+  } = useCrawlStatusPoller({ hotelId: pollingHotelId, otaIds: selectedOtaIds });
 
   useEffect(() => {
     const fetchHotels = async () => {
@@ -114,19 +110,32 @@ export default function CrawlerAdminPage() {
   };
 
   const handleOtaChange = (otaId: number) => {
-    setSelectedOtas((prev) => ({ ...prev, [otaId]: !prev[otaId] }));
+    setSelectedOtaIds((prevSelectedIds) => {
+      // すでに選択されていれば、リストから除外
+      if (prevSelectedIds.includes(otaId)) {
+        return prevSelectedIds.filter((id) => id !== otaId);
+      }
+      // 選択されていなければ、リストに追加
+      else {
+        return [...prevSelectedIds, otaId];
+      }
+    });
   };
 
   const handleRunCrawler = async () => {
     if (!selectedHotel) {
-      alert('ホテルを選択してください。');
+      toast.error('ホテルを選択してください。');
+      return;
+    }
+    if (selectedOtaIds.length === 0) {
+      toast.error('クロール対象のOTAを1つ以上選択してください。');
       return;
     }
     setIsLoading(true);
     setPollingHotelId(null);
 
     const options: CrawlerOptions = {
-      otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+      ota_ids: selectedOtaIds,
       startDate: specifyDate ? formatDate(startDate) : null,
       endDate: specifyDate ? formatDate(endDate) : null,
     };
@@ -147,7 +156,7 @@ export default function CrawlerAdminPage() {
     setIsExporting(true);
 
     const options: CrawlerOptions = {
-      otas: Object.keys(selectedOtas).filter((key) => selectedOtas[key]),
+      ota_ids: selectedOtaIds,
       startDate: specifyDate ? formatDate(startDate) : null,
       endDate: specifyDate ? formatDate(endDate) : null,
     };
@@ -160,10 +169,10 @@ export default function CrawlerAdminPage() {
     }
   };
 
-    const isRunCrawlerButtonDisabled =
-      !selectedHotel || isLoading || isPollingLoading;
+  const isRunCrawlerButtonDisabled =
+    !selectedHotel || isLoading ;
 
-    const isExportButtonDisabled = !selectedHotel || isExporting;
+  const isExportButtonDisabled = !selectedHotel || isExporting;
 
   return (
     <div className='min-h-screen bg-slate-50 text-slate-800'>
@@ -299,7 +308,7 @@ export default function CrawlerAdminPage() {
                 >
                   <input
                     type='checkbox'
-                    checked={selectedOtas[ota.id] || false}
+                    checked={selectedOtaIds.includes(ota.id)}
                     onChange={() => handleOtaChange(ota.id)}
                     className='form-checkbox h-5 w-5 text-indigo-600 rounded'
                   />

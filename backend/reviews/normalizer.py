@@ -56,14 +56,6 @@ class DataNormalizer:
                 maps["ota_specific"][ota] = ota_map
         return maps
 
-    # def _build_room_type_maps(self, config):
-    #     maps = {}
-    #     room_type_config = config.get("room_type", {})
-    #     for hotel_id, hotel_mappings in room_type_config.items():
-    #         maps[hotel_id] = {}
-    #         for ota_name, ota_mappings in hotel_mappings.items():
-    #             maps[hotel_id][ota_name] = self._create_reverse_map(ota_mappings)
-    #     return maps
 
     def normalize_traveler_type(self, original_value, ota_name):
         maps_dict = self.traveler_type_maps

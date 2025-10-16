@@ -1,7 +1,7 @@
 import pandas as pd
 import io
 import re
-from datetime import datetime
+from datetime import date
 import re
 import hashlib
 import pandas as pd
@@ -222,15 +222,28 @@ def save_reviews_to_db(reviews_list, crawl_target: CrawlTarget):
         try:
 
             with transaction.atomic():
+                reviewer_name = str(review_data.get('reviewer_name', '')).strip()
+                raw_date = review_data.get('review_date')
+                if isinstance(raw_date, date):
+                    normalized_date = raw_date.isoformat()
+                elif isinstance(raw_date, str):
+                    normalized_date = raw_date.strip() 
+                else:
+                    normalized_date = ''
+                score_original = str(
+                    review_data.get("overall_score_original", "")
+                ).strip()
+                comment = str(review_data.get("review_comment", "")).strip()
+                
                 # 【ハッシュ生成】
                 # 欠損したり変更されたりする可能性が低い、安定したコア情報のみでハッシュを構成する。
                 # これにより、2回目にクロールした際に一部情報が欠損しても、同じレビューとして特定できる。
                 source_string = (
                     f"{crawl_target.id}-"
-                    f"{review_data.get('reviewer_name', '')}-"
-                    f"{review_data.get('review_date', '')}-"
-                    f"{review_data.get('overall_score_original', '')}-"
-                    f"{review_data.get('review_comment', '')}"
+                    f"{reviewer_name}-"
+                    f"{normalized_date}-"
+                    f"{score_original}-"
+                    f"{comment}"
                 )
                 review_hash = hashlib.sha256(source_string.encode("utf-8")).hexdigest()
 

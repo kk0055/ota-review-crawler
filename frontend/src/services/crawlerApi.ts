@@ -5,7 +5,7 @@ export interface ApiHotel {
 }
 
 export interface CrawlerOptions {
-  otas: string[];
+  ota_ids: number[];
   startDate: string | null;
   endDate: string | null;
 }

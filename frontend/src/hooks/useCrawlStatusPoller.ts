@@ -15,6 +15,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface UseCrawlStatusPollerProps {
   hotelId: number | null;
+  otaIds: number[] | null;
   interval?: number;
 }
 
@@ -26,6 +27,7 @@ interface UseCrawlStatusPollerReturn {
 
 export function useCrawlStatusPoller({
   hotelId,
+  otaIds,
 }: UseCrawlStatusPollerProps): UseCrawlStatusPollerReturn {
   const [statusData, setStatusData] = useState<CrawlStatus[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -33,7 +35,8 @@ export function useCrawlStatusPoller({
 
   useEffect(() => {
     // hotelIdがなければ何もしない（状態をリセット）
-    if (!hotelId) {
+    // otaIdsが空の配列の場合もクロール対象がないので処理を中断
+    if (!hotelId || !otaIds || otaIds.length === 0) {
       setStatusData([]);
       setIsLoading(false);
       setError(null);
@@ -48,8 +51,10 @@ export function useCrawlStatusPoller({
       if (!isMounted) return;
 
       try {
+        const otaIdsParam = otaIds.join(',');
+        // URLにクエリパラメータとして追加
         const response = await axios.get<CrawlStatus[]>(
-          `${API_URL}/crawl-status/${hotelId}/`
+          `${API_URL}/crawl-status/${hotelId}/?ota_ids=${otaIdsParam}`
         );
 
         if (isMounted) {
@@ -92,7 +97,7 @@ export function useCrawlStatusPoller({
         clearTimeout(timeoutId);
       }
     };
-  }, [hotelId]);
+  }, [hotelId, otaIds]);
 
   return { statusData, isLoading, error };
 }

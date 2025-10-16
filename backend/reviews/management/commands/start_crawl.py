@@ -1,9 +1,11 @@
 from django.core.management.base import BaseCommand, CommandError
-from reviews.models import CrawlTarget,Hotel,Ota
+from reviews.models import CrawlTarget, Hotel, Ota
 
 from django.utils import timezone
 from reviews.services import run_crawl_and_save
+
 # from reviews.utils.excel_exporter import export_dataframe_to_excel
+
 
 class Command(BaseCommand):
     help = "指定されたホテルの口コミ情報をクロールしてDBに保存します。"
@@ -25,7 +27,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--ota-ids",
             nargs="+",
-            type=int, # IDなので整数型で受け取る
+            type=int,  # IDなので整数型で受け取る
             default=None,
             help="【ID指定】クロール対象のOTAのIDリスト (例: 3 4)。APIからの実行時に使用。",
         )
@@ -66,10 +68,10 @@ class Command(BaseCommand):
                 f'先に `register_hotel "{hotel_name}"` コマンドで登録してください。'
             )
 
-        crawl_targets = CrawlTarget.objects.filter(
-            hotel=hotel_master
-        ).select_related("ota")
-        
+        crawl_targets = CrawlTarget.objects.filter(hotel=hotel_master).select_related(
+            "ota"
+        )
+
         ota_filter_msg = ""
         if otas:  # 名前でフィルタリング
             crawl_targets = crawl_targets.filter(ota__name__in=otas)
@@ -97,14 +99,22 @@ class Command(BaseCommand):
 
         # --- 3. OTAごとのループ処理 ---
         for target in crawl_targets:
-            self.stdout.write(f"\n▶ 処理中: {target.ota.name} (Hotel ID: {target.id})")
+            self.stdout.write(
+                f"\n▶ 処理中: {target.ota.name} "
+                f"(Hotel ID: {hotel_master.id}, CrawlTarget ID: {target.id})"
+            )
             target.last_crawl_status = CrawlTarget.CrawlStatus.PENDING
             target.save()
 
             success, message = run_crawl_and_save(
-                target, start_date, end_date, hotel_slug=hotel_master.slug)
+                target, start_date, end_date, hotel_slug=hotel_master.slug
+            )
 
-            target.last_crawl_status = CrawlTarget.CrawlStatus.SUCCESS if success else CrawlTarget.CrawlStatus.FAILURE
+            target.last_crawl_status = (
+                CrawlTarget.CrawlStatus.SUCCESS
+                if success
+                else CrawlTarget.CrawlStatus.FAILURE
+            )
             target.last_crawl_message = message
             target.last_crawled_at = timezone.now()
             target.save()
