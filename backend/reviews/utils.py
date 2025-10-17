@@ -6,8 +6,9 @@ LANG_MAP_JA = {
     "ja": "日本語",
     "en": "英語",
     "ko": "韓国語",
-    "zh-cn": "中国語 (簡体)",
-    "zh-tw": "中国語 (繁体)",
+    'zh': '中国語',
+    # "zh-cn": "中国語 (簡体)",
+    # "zh-tw": "中国語 (繁体)",
     "fr": "フランス語",
     "de": "ドイツ語",
     "es": "スペイン語",
@@ -52,17 +53,20 @@ def detect_language(text: str) -> str:
         return None
 
     try:
-        
+
         # details: (('言語名1', '言語コード1', 信頼度%, スコア), ('言語名2', ...))
         is_reliable, text_bytes_found, details = cld2.detect(text)
 
         # detailsが空、または最初の判定結果が 'un' (unknown) の場合は判定不能とみなす
         if not details or details[0][1] == 'un':
             return None
-        
-        # 最も可能性の高い言語のISO 639-1コードを返す
-        return details[0][1]
 
+        lang_code = details[0][1]
+
+        if "-" in lang_code:
+            lang_code = lang_code.split("-")[0]
+            
+        return lang_code
     except cld2.error:
         return None
 

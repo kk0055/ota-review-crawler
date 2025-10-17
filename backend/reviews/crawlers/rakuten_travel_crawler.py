@@ -72,7 +72,31 @@ def scrape_rakuten_travel_reviews(
     try:
         print(f"アクセス中: {url}")
         driver.get(url)
+        try:
+            print("「最新の投稿順」に並び替えます...")
+            
+            # 1. 「最新の投稿順」のリンクが見つかるまで待機し、取得する
+            sort_button = wait.until(
+                EC.element_to_be_clickable((By.LINK_TEXT, "最新の投稿順"))
+            )
+            
+            # 2. リンクをクリックする
+            sort_button.click()
+            
+            # 3. クリックによるページの再読み込みが完了し、口コミが表示されるまで待機
+            print("ページの再読み込みを待機しています...")
+            wait.until(
+                EC.presence_of_all_elements_located((By.CLASS_NAME, "commentBox"))
+            )
+            print("並び替えが完了しました。")
 
+        except TimeoutException:
+            print("「最新の投稿順」ボタンが見つからないか、並び替え後のページ読み込みに失敗しました。")
+            # 並び替えに失敗した場合は、処理を中断するか、そのまま続行するかを決定
+            # ここでは処理を中断する
+            driver.quit()
+            return []
+        
         # === 口コミ収集のメインループ (ページが続く限り実行) ===
         while not stop_scraping:
             print(f"\n--- {page_count}ページ目の口コミを収集中 ---")
