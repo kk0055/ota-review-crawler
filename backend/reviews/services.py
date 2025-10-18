@@ -8,6 +8,7 @@ import pandas as pd
 from .models import Review, CrawlTarget, ReviewScore, Hotel
 from .crawlers.expedia_crawler import scrape_expedia_reviews
 from .crawlers.rakuten_travel_crawler import scrape_rakuten_travel_reviews
+from .crawlers.google_travel_crawler import scrape_google_travel_reviews
 import logging
 from decimal import Decimal, InvalidOperation
 from django.db import transaction
@@ -63,6 +64,16 @@ def run_crawl_and_save(
         elif target.ota.name == "楽天トラベル":
             print(f"OTA: 楽天トラベル を検出。楽天トラベル用クローラーを開始します。")
             reviews_list = scrape_rakuten_travel_reviews(
+                url=target.crawl_url,
+                hotel_id=hotel_slug,
+                start_date_str=start_date,
+                end_date_str=end_date,
+            )
+        elif target.ota.name == "Googleトラベル":
+            print(
+                f"OTA: Googleトラベル を検出。Googleトラベル用クローラーを開始します。"
+            )
+            reviews_list = scrape_google_travel_reviews(
                 url=target.crawl_url,
                 hotel_id=hotel_slug,
                 start_date_str=start_date,
