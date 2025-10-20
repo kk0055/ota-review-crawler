@@ -12,6 +12,8 @@ import pprint
 from ..normalizer import DataNormalizer
 from reviews.utils import normalize_score, detect_language, get_language_name_ja
 import html
+from selenium.webdriver.common.keys import Keys
+
 
 def parse_google_relative_date(relative_date_str: str) -> datetime:
     """
@@ -90,12 +92,16 @@ def scrape_google_travel_reviews(
     """
     # === WebDriverのセットアップ===
     options = uc.ChromeOptions()
-    options.add_argument("--lang=en-US,en;q=0.9,ja-JP;q=0.8,ja;q=0.7")
-    # options.add_argument("--lang=ja-JP")
+    # options.add_argument("--lang=en-US,en;q=0.9,ja-JP;q=0.8,ja;q=0.7")
+    options.add_argument("--lang=ja-JP")
     # options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    prefs = {
+        'intl.accept_languages': 'ja,en'
+    }
+    options.add_experimental_option('prefs', prefs)
 
     driver = uc.Chrome(options=options)
     driver.set_window_size(1200, 800)
@@ -150,7 +156,7 @@ def scrape_google_travel_reviews(
                 return []
         try:
             print("「新しい順」での並び替えを試みます...")
-            sort_button_xpath = "//div[@role='option' and contains(., 'Most helpful')]"
+            sort_button_xpath = "//div[@role='option' and (contains(., 'Most helpful')or contains(., '参考度の高い順'))]"
             sort_button = wait.until(
                 EC.element_to_be_clickable((By.XPATH, sort_button_xpath))
             )
@@ -159,7 +165,12 @@ def scrape_google_travel_reviews(
             sort_button.click()
             time.sleep(1)
             newest_option = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//div[@aria-label='Most recent'][@data-value='2'][@role='option']"))
+                EC.element_to_be_clickable(
+                    (
+                        By.XPATH,
+                        "//div[@aria-label='新しい順'][@data-value='2'][@role='option']",
+                    )
+                )
             )
             newest_option.click()
             print("並び替え後のクチコミ読み込みを待機しています...")
@@ -169,18 +180,59 @@ def scrape_google_travel_reviews(
 
         print("ページ全体のスクロールで処理を開始します。")
 
-        # スクロール前の高さを取得
-        last_height = driver.execute_script("return document.body.scrollHeight")
+        # ページ上の最初のレビュー要素を1つだけ取得する
+        # これを基準にスクロール対象を特定する
+        try:
+            first_review_xpath = (
+                "(//div[@jsname='kmPxT']/ancestor::div[@data-ved][1])[1]"
+            )
+            first_review_element = wait.until(
+                EC.presence_of_element_located((By.XPATH, first_review_xpath))
+            )
+        except TimeoutException:
+            print(
+                "[エラー] レビュー要素が見つかりません。ページ構造が違う可能性があります。"
+            )
+            driver.quit()
+            return []
+
+        # スクロール対象となる要素を動的に特定する (★★★ 新しいロジック ★★★)
+        scrollable_div = None
+        current_element = first_review_element
+        # 親を10階層まで遡って探す (無限ループ防止)
+        for _ in range(10):
+            # 親要素に移動
+            current_element = current_element.find_element(By.XPATH, "./..")
+            # scrollHeightとclientHeightに差があるかチェック
+            is_scrollable = driver.execute_script(
+                "return arguments[0].scrollHeight > arguments[0].clientHeight;",
+                current_element,
+            )
+            if is_scrollable:
+                scrollable_div = current_element
+                print("スクロール対象のパネルを動的に特定しました。")
+                break
+
+        if not scrollable_div:
+            print(
+                "[警告] スクロール対象のパネルを動的に特定できませんでした。ページ全体をスクロールします。"
+            )
+            # フォールバックとしてページ全体(body)を対象にする
+            scrollable_div_xpath = "//body"
+            scrollable_div = driver.find_element(By.XPATH, scrollable_div_xpath)
+
 
         while not stop_scraping:
-
-            review_elements_xpath = "//div[.//span[@role='img'] and .//a[contains(@href, '/contrib/')]]"  # 旧セレクタ: (By.CSS_SELECTOR, "div.Svr5cf")
+            processed_count = len(processed_review_ids)
+            # review_elements_xpath = ".//div[@jsname='kmPxT']/../../.."
+            review_elements_xpath = ".//div[@jsname='kmPxT']/ancestor::div[@data-ved][1]"
             review_elements = driver.find_elements(By.XPATH, review_elements_xpath)
             print(f"ページ上で{len(review_elements)}件の口コミを検出しました。")
-
-            # (以降のループ処理は変更なし)
-            if not review_elements:
+            
+            if not review_elements or len(review_elements) == processed_count:
+                print("新しい口コミが見つかりませんでした。収集を終了します。")
                 break
+
             last_processed_date = None
 
             for review_element in review_elements:
@@ -220,18 +272,25 @@ def scrape_google_travel_reviews(
             if stop_scraping:
                 break
 
-            print("\nページをスクロールして新しい口コミを読み込みます...")
-            # 常にページ全体をスクロールする
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(4)  # 読み込み待機
+            print("\nパネルをスクロールして新しい口コミを読み込みます...")
+            
+            # スクロール前のレビュー数を取得
+            current_review_count = len(driver.find_elements(By.XPATH, review_elements_xpath))
 
-            # 新しい高さを取得
-            new_height = driver.execute_script("return document.body.scrollHeight")
+            # スクロール実行
+            driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", scrollable_div)
 
-            if new_height == last_height:
-                print("ページの最下部に到達しました。収集を終了します。")
-                break
-            last_height = new_height
+            try:
+                # ★★★ 新しい待機処理 ★★★
+                # タイムアウトは10秒。10秒経ってもレビュー数が増えなければ、最下部と判断。
+                wait_for_new_reviews = WebDriverWait(driver, 10)
+                wait_for_new_reviews.until(
+                    lambda d: len(d.find_elements(By.XPATH, review_elements_xpath)) > current_review_count
+                )
+                print("新しい口コミの読み込みを検知しました。")
+            except TimeoutException:
+                print("タイムアウト：新しい口コミが読み込まれませんでした。ページの最下部と判断します。")
+                stop_scraping = True # ループを終了させる
 
     except Exception as e:
         print(f"予期せぬエラーが発生しました: {e}")
@@ -331,13 +390,27 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
         ).text.strip()
 
         # 投稿日時
-        time_str = review_element.find_element(
-            By.XPATH, ".//a[contains(@href, '/contrib/')]/following-sibling::span"
-        ).text.strip()
+        time_str = ""
+        try:
+            # Googleアイコンを基点に、その前のテキストノードを取得
+            date_xpath = ".//img[contains(@src, 'googleg')]/parent::span/preceding-sibling::text()"
+            script = """
+                var xpathResult = document.evaluate(arguments[1], arguments[0], null, XPathResult.STRING_TYPE, null);
+                return xpathResult.stringValue;
+                """
+            time_str = driver.execute_script(script, review_element, date_xpath)
+
+            # "最終編集:" や "、" などの余分な文字列を削除
+            if time_str:
+                time_str = time_str.replace("最終編集:", "").replace("、", "").strip()
+
+        except NoSuchElementException:
+            print("  [警告] 投稿日時の取得に失敗しました。")
+
         review_datetime = parse_google_relative_date(time_str)
         review_date = review_datetime.strftime("%Y-%m-%d")
 
-        # 「もっと見る」ボタン
+        # 「続きを読む」ボタン
         try:
             more_button_xpath = ".//span[@role='button' and (contains(., 'Read more') or contains(., '続きを読む'))]"
             more_button = review_element.find_element(By.XPATH, more_button_xpath)
@@ -379,13 +452,22 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
         # コメント本文
         comment_full_html = ""
         try:
-            comment_span_xpath = ".//div[@jsname='kmPxT']//span"
+            # 1. まず完全版のレビューテキストコンテナを探す
+            comment_span_xpath = ".//div[@jsname='NwoMSd']//span"
             comment_span_element = review_element.find_element(
                 By.XPATH, comment_span_xpath
             )
             comment_full_html = comment_span_element.get_attribute("innerHTML")
         except NoSuchElementException:
-            print("  [警告] 主要パターンで口コミ本文の取得に失敗しました。")
+            # 2. 完全版がなければ、省略版のレビューテキストコンテナを探す（フォールバック）
+            try:
+                comment_span_xpath_fallback = ".//div[@jsname='kmPxT']//span"
+                comment_span_element = review_element.find_element(
+                    By.XPATH, comment_span_xpath_fallback
+                )
+                comment_full_html = comment_span_element.get_attribute("innerHTML")
+            except NoSuchElementException:
+                print("  [警告] いずれのパターンでも口コミ本文の取得に失敗しました。")
 
         # 2. HTMLをクリーニングして、扱いやすいプレーンテキストに変換する
         def clean_html_to_text(html_string):
@@ -397,7 +479,7 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
             text = re.sub(r"<br\s*/?>", "\n", text)
             # 残りのすべてのHTMLタグを除去
             text = re.sub(r"<.*?>", "", text)
-            # 連続する空白や改行をまとめる（任意ですが、より綺麗になります）
+            # 連続する空白や改行をまとめる
             text = re.sub(r"\s+", " ", text).strip()
             return text
 
@@ -405,31 +487,45 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
         comment_full_text = clean_html_to_text(comment_full_html)
 
         # 3. クリーニングされたテキストを元に、分離処理を行う
-        original_marker = "(Original)"
-        translation_marker = "(Translated by Google)"
-        review_comment = ""
-        translated_review_comment = None
+        original_marker = "（原文）"
+        translation_marker = "（Google による翻訳）"
 
+        review_comment = ""
+        translated_review_comment = "" 
+
+        # パターンA: 「原文」と「翻訳」の両方が存在する場合
         if original_marker in comment_full_text:
             parts = comment_full_text.split(original_marker, 1)
-            translated_review_comment = parts[0].strip()
+            translated_part = parts[0]
             review_comment = parts[1].strip()
+            translated_review_comment = translated_part.replace(translation_marker, "").strip()
+
+        # パターンB: 「翻訳」のみが存在する場合 (原文が英語のレビューなど)
         elif translation_marker in comment_full_text:
-            parts = comment_full_text.split(translation_marker, 1)
-            review_comment = parts[0].strip()
-            translated_review_comment = parts[1].strip()
+            # マーカー以降を翻訳文として取得
+            translated_review_comment = comment_full_text.replace(translation_marker, "").strip()
+            # この場合、原文はHTML上に存在しないため、
+            # 利便性のために「原文」フィールドにも日本語訳を入れておく
+            review_comment = translated_review_comment
+
+        # パターンC: どちらのマーカーも存在しない場合 (日本語のレビューなど)
         else:
-            # どちらのマーカーもない場合
             review_comment = comment_full_text
 
-        # 4. Read more... のような不要な末尾テキストを削除
-        #    (この処理は日本語環境では不要かもしれませんが、英語環境では役立ちます)
-        if review_comment and review_comment.endswith("… Read more"):
-            review_comment = review_comment[:-11].strip()
-        if translated_review_comment and translated_review_comment.endswith(
-            "… Read more"
-        ):
-            translated_review_comment = translated_review_comment[:-11].strip()
+        endings_to_remove = ["… 続きを読む", "… もっと見る", "… Read more"]
+        # review_comment の末尾をチェックして削除
+        for ending in endings_to_remove:
+            if review_comment.endswith(ending):
+                review_comment = review_comment[: -len(ending)].strip()
+                break  # 1つ見つかったらループを抜ける
+
+        # translated_review_comment の末尾をチェックして削除
+        for ending in endings_to_remove:
+            if translated_review_comment.endswith(ending):
+                translated_review_comment = translated_review_comment[
+                    : -len(ending)
+                ].strip()
+                break
 
         language_code = detect_language(review_comment)
         language_name = get_language_name_ja(language_code)
@@ -471,7 +567,6 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
             "overall_score_original": overall_score_original_text,
             "original_score_scale": original_score_scale,
             "reviewer_name": reviewer_name,
-            # ... その他のデータ ...
             "rooms_score": rooms_score,  # 正規化後の部屋スコア
             "rooms_score_original": rooms_score_original,  # 元の部屋スコア
             "service_score": service_score,  # 正規化後のサービススコア
