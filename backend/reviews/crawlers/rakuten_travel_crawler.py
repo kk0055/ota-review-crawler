@@ -223,7 +223,12 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name, driver, 
             try:
                 match = re.search(r"^(.*?)\s*\[(.*?)\]$", user_full_text)
                 if match:
-                    reviewer_name = match.group(1).strip()
+                    name_raw = match.group(1).strip()
+                    if name_raw.endswith('さん'):
+                        reviewer_name = name_raw[:-2]
+                    else:
+                        reviewer_name = name_raw
+                        
                     details = match.group(2).strip()
 
                     # 詳細情報を'/'で分割

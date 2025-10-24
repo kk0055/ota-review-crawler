@@ -8,7 +8,8 @@ import pandas as pd
 from .models import Review, CrawlTarget, ReviewScore, Hotel
 from .crawlers.expedia_crawler import scrape_expedia_reviews
 from .crawlers.rakuten_travel_crawler import scrape_rakuten_travel_reviews
-from .crawlers.google_travel_crawler import scrape_google_travel_reviews
+# from .crawlers.google_travel_crawler import scrape_google_travel_reviews
+from .crawlers.jalan_crawler import scrape_jalan_reviews
 import logging
 from decimal import Decimal, InvalidOperation
 from django.db import transaction
@@ -19,7 +20,6 @@ logging.basicConfig(
 
 
 EXCEL_HEADER_MAP = {
-    # Reviewモデルから取得するフィールド
     "review_date": "投稿月日",
     "ota_name": "OTA",
     "reviewer_name": "ユーザー名",
@@ -31,8 +31,6 @@ EXCEL_HEADER_MAP = {
     "traveler_type": "旅行形態",
     "gender": "性別",
     "age_group": "年代",
-    "review_comment": "口コミ本文",
-    "translated_review_comment": "口コミ(翻訳済)",
     "overall_score": "総合評価",
     # ReviewScoreからピボットして生成されるフィールド (enumのキーと一致させる)
     "LOCATION": "立地",
@@ -44,6 +42,8 @@ EXCEL_HEADER_MAP = {
     "FOOD": "食事",
     "BREAKFAST": "料理（朝食）",
     "DINNER": "料理（夕食）",
+    "review_comment": "口コミ本文",
+    "translated_review_comment": "口コミ(翻訳済)",
 }
 
 def run_crawl_and_save(
@@ -71,16 +71,24 @@ def run_crawl_and_save(
                 start_date_str=start_date,
                 end_date_str=end_date,
             )
-        elif target.ota.name == "Googleトラベル":
-            print(
-                f"OTA: Googleトラベル を検出。Googleトラベル用クローラーを開始します。"
-            )
-            reviews_list = scrape_google_travel_reviews(
+        elif target.ota.name == "じゃらん":
+            print(f"OTA: じゃらん を検出。じゃらん用クローラーを開始します。")
+            reviews_list = scrape_jalan_reviews(
                 url=target.crawl_url,
                 hotel_id=hotel_slug,
                 start_date_str=start_date,
                 end_date_str=end_date,
             )
+        # elif target.ota.name == "Googleトラベル":
+        #     print(
+        #         f"OTA: Googleトラベル を検出。Googleトラベル用クローラーを開始します。"
+        #     )
+        #     reviews_list = scrape_google_travel_reviews(
+        #         url=target.crawl_url,
+        #         hotel_id=hotel_slug,
+        #         start_date_str=start_date,
+        #         end_date_str=end_date,
+        #     )
         else:
             return True, f"'{target.ota.name}' に対応するクローラーがありません。"
 
