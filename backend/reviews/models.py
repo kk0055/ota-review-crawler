@@ -138,7 +138,6 @@ class CrawlTarget(models.Model):
         blank=True,
         help_text="各OTAサイト内でホテルを一位に識別するID",
     )
-    # hotel_name = models.CharField("ホテル名", max_length=200)
     crawl_url = models.URLField(
         "クロール対象URL",
         max_length=512,  # URLは長くなる可能性があるので余裕を持たせる
@@ -329,6 +328,7 @@ class ReviewScore(models.Model):
         FOOD = "FOOD", _("食事")
         BREAKFAST = "BREAKFAST", _("朝食")
         DINNER = "DINNER", _("夕食")
+        SATISFACTION = "SATISFACTION", _("満足度")
         # PRICE_PERFORMANCE = "PRICE_PERFORMANCE", _("コスパ")
 
     review = models.ForeignKey(
