@@ -34,71 +34,48 @@ class DataNormalizer:
             raise FileNotFoundError(f"設定ファイルが見つかりません: {config_path}")
 
         # 各種マッピングを構築
-        self.traveler_type_maps = self._build_maps(self.config.get("traveler_type", {}))
-        self.purpose_maps = self._build_maps(self.config.get("purpose_of_visit", {}))
+        self.traveler_type_reverse_map = self._build_simple_map(
+            self.config.get("traveler_type", {})
+        )
+        self.purpose_reverse_map = self._build_simple_map(
+            self.config.get("purpose_of_visit", {})
+        )
 
-    def _build_maps(self, config_section):
-        """設定から逆引きマップ {'元文字列': '正規化後'} を構築するヘルパー関数"""
-        maps = {"common": {}, "ota_specific": {}}
-
-        # 共通マップの構築
-        for normalized_value, original_list in config_section["common"].items():
+    def _build_simple_map(self, config_section):
+        """ 設定からシンプルな逆引きマップを構築"""
+        reverse_map = {}
+        # config_sectionは {'家族': ['家族', 'ファミリー', ...], ...} のような辞書
+        for normalized_value, original_list in config_section.items():
             for original_value in original_list:
-                maps["common"][original_value] = normalized_value
+                reverse_map[original_value] = normalized_value
+        return reverse_map
 
-        # OTA固有マップの構築
-        if "ota_specific" in config_section:
-            for ota, ota_config in config_section["ota_specific"].items():
-                ota_map = {}
-                for normalized_value, original_list in ota_config.items():
-                    for original_value in original_list:
-                        ota_map[original_value] = normalized_value
-                maps["ota_specific"][ota] = ota_map
-        return maps
-
-
-    def normalize_traveler_type(self, original_value, ota_name):
-        maps_dict = self.traveler_type_maps
+    def normalize_traveler_type(self, original_value):
         if not original_value:
             return None
-        ota_map = maps_dict["ota_specific"].get(ota_name, {})
-        normalized = ota_map.get(original_value)
-        if normalized:
-            return normalized
-        common_map = maps_dict["common"]
-        return common_map.get(original_value, "その他")
+        return self.traveler_type_reverse_map.get(original_value, "その他")
 
-    def normalize_purpose(self, original_value, ota_name):
-        maps_dict = self.purpose_maps
+    def normalize_purpose(self, original_value):
         if not original_value:
             return None
-        common_map = maps_dict["common"]
-        return common_map.get(original_value, "その他")
+        return self.purpose_reverse_map.get(original_value, "その他")
 
     @lru_cache(maxsize=32)
     def _get_normalization_patterns(self, map_key, ota_name=None):
         """
-        【新しいヘルパー関数】
         YAMLマップから(パターン, 正規化後の値)のタプルリストを生成し、
         パターン長で降順ソートして返す。
         """
-        maps = getattr(self, map_key)  # self.traveler_type_mapsなどを動的に取得
+        config_section = self.config.get(map_key, {})
 
         pattern_list = []
 
-        # 1. 共通のパターンを追加
-        for norm_value, raw_tags in maps.get("common", {}).items():
-            for raw_tag in raw_tags:
-                pattern_list.append((raw_tag, norm_value))
-
-        # 2. OTA固有のパターンを追加
-        if ota_name:
-            ota_map = maps.get("ota_specific", {}).get(ota_name, {})
-            for norm_value, raw_tags in ota_map.items():
+        for norm_value, raw_tags in config_section.items():
+            if isinstance(raw_tags, list): 
                 for raw_tag in raw_tags:
                     pattern_list.append((raw_tag, norm_value))
 
-        # 3. パターンの文字数が長い順（より具体的）にソート
+        # パターンの文字数が長い順（より具体的）にソートするロジックは非常に重要なので残す
         pattern_list.sort(key=lambda x: len(x[0]), reverse=True)
         return pattern_list
 
@@ -121,10 +98,10 @@ class DataNormalizer:
             return {"traveler_type": None, "purpose": None}
 
         # ソート済みのパターンリストを取得
-        traveler_patterns = self._get_normalization_patterns(
-            "traveler_type_maps", ota_name
+        traveler_patterns = self._get_normalization_patterns("traveler_type", ota_name)
+        purpose_patterns = self._get_normalization_patterns(
+            "purpose_of_visit", ota_name
         )
-        purpose_patterns = self._get_normalization_patterns("purpose_maps", ota_name)
 
         # 部分一致でマッチするものをすべて発見する
         found_traveler_types = set()
@@ -161,7 +138,6 @@ class DataNormalizer:
     @lru_cache(maxsize=128)
     def _get_sorted_pattern_list(self, hotel_slug, ota_name):
         """
-        【内部ヘルパー/修正版】
         正規化のための「(パターン, 正規化名)」のタプルリストを生成し、
         パターンの文字数が長い順（より具体的なルールが先）にソートしてキャッシュする。
         """

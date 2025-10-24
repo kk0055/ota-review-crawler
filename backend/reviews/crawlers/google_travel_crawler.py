@@ -457,10 +457,10 @@ def extract_google_review_data(review_element, normalizer, hotel_id, ota_name, d
             pass
 
         normalized_purpose = normalizer.normalize_purpose(
-            original_purpose or original_traveler_type, ota_name
+            original_purpose or original_traveler_type
         )
         normalized_traveler_type = normalizer.normalize_traveler_type(
-            original_traveler_type, ota_name
+            original_traveler_type
         )
 
         # コメント本文

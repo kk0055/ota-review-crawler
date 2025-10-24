@@ -304,10 +304,10 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name, driver, 
         original_purpose = purpose_data.get("旅行の目的")
 
         normalized_traveler_type = normalizer.normalize_traveler_type(
-            original_traveler_type, ota_name
+            original_traveler_type
         )
         normalized_purpose = normalizer.normalize_purpose(
-            original_purpose or original_traveler_type, ota_name
+            original_purpose or original_traveler_type
         )
   
         normalized_room_type = normalizer.normalize_room_type(

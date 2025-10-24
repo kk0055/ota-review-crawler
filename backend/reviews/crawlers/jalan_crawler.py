@@ -342,10 +342,10 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             original_traveler_type, ota_name
         )
         normalized_purpose = normalizer.normalize_purpose(
-            original_purpose or original_traveler_type, ota_name
+            original_purpose or original_traveler_type
         )
         normalized_room_type = normalizer.normalize_room_type(
-            original_room_type, hotel_id, ota_name
+            original_room_type, hotel_id
         )
 
         review_data = {

@@ -10,6 +10,7 @@ from .crawlers.expedia_crawler import scrape_expedia_reviews
 from .crawlers.rakuten_travel_crawler import scrape_rakuten_travel_reviews
 # from .crawlers.google_travel_crawler import scrape_google_travel_reviews
 from .crawlers.jalan_crawler import scrape_jalan_reviews
+from .crawlers.ikyu_crawler import scrape_ikyu_reviews
 import logging
 from decimal import Decimal, InvalidOperation
 from django.db import transaction
@@ -74,6 +75,14 @@ def run_crawl_and_save(
         elif target.ota.name == "じゃらん":
             print(f"OTA: じゃらん を検出。じゃらん用クローラーを開始します。")
             reviews_list = scrape_jalan_reviews(
+                url=target.crawl_url,
+                hotel_id=hotel_slug,
+                start_date_str=start_date,
+                end_date_str=end_date,
+            )
+        elif target.ota.name == "一休":
+            print(f"OTA: 一休 を検出。一休用クローラーを開始します。")
+            reviews_list = scrape_ikyu_reviews(
                 url=target.crawl_url,
                 hotel_id=hotel_slug,
                 start_date_str=start_date,

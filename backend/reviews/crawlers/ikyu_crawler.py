@@ -72,7 +72,7 @@ def scrape_ikyu_reviews(
         print("レビューページに移動しました。")
 
         # ページの読み込みを待機
-        time.sleep(2)
+        time.sleep(5)
 
         print("「新しい順」で並び替えます...")
         # aria-label属性で並び替えボタンを特定
@@ -205,7 +205,6 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
     normalized_overall_score, overall_score_original = None, None
     normalized_room_score, room_score_original = None, None
     normalized_service_score, service_score_original = None, None
-    normalized_location_score, location_score_original = None, None
     normalized_bath_score, bath_score_original = None, None
     normalized_food_score, food_score_original = None, None
     normalized_facilities_score, facilities_score_original = (
@@ -220,13 +219,8 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
     reviewer_name = None, 
     review_datetime, review_date,  review_comment = None, None, None
     stay_date_for_db = None
-    normalized_traveler_type, original_traveler_type = None, None
-    normalized_purpose, original_purpose = None, None
     normalized_room_type, original_room_type = None, None
     language_code, language_name = None, None
-    original_traveler_type, normalized_traveler_type = None, None
-    original_purpose, normalized_purpose = None, None
-    original_room_type, normalized_room_type = None, None  
     try:
         ### 投稿者名 ###
         reviewer_name = review_element.find_element(
@@ -294,7 +288,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
 
         try:
             stay_info_container = review_element.find_element(
-                By.XPATH, './/ul[li/svg/path[contains(@d, "M9 44q")]]'
+                By.CSS_SELECTOR, 'ul.bg-gray-100'
             )
             # コンテナ内のすべての<li>要素を取得
             stay_info_items = stay_info_container.find_elements(By.TAG_NAME, "li")
@@ -334,16 +328,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
         language_code = detect_language(review_comment)
         language_name = get_language_name_ja(language_code)
 
-        original_purpose = (
-            original_traveler_type  # Ikyuでは目的と旅行形態が同じことが多い
-        )
-
         # --- データ処理・正規化 ---
-        normalized_traveler_type = normalizer.normalize_traveler_type(
-            original_traveler_type, ota_name
-        )
-
-        normalized_purpose = normalizer.normalize_purpose(original_purpose, ota_name)
 
         normalized_room_type = normalizer.normalize_room_type(
             original_room_type, hotel_id, ota_name
@@ -374,27 +359,21 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
             "overall_score_original": overall_score_original,
             "room_score": normalized_room_score,
             "room_score_original": room_score_original,
-            "service_score": normalized_service_score,
-            "service_score_original": service_score_original,
-            "location_score": normalized_location_score,
-            "location_score_original": location_score_original,
-            "bath_score": normalized_bath_score,
-            "bath_score_original": bath_score_original,
-            "food_score": normalized_food_score,
-            "food_score_original": food_score_original,
             "facilities_score": normalized_facilities_score,
             "facilities_score_original": facilities_score_original,
-            "satisfaction_score": normalized_satisfaction_score, 
-            "satisfaction_score_original": satisfaction_score_original,  
+            "service_score": normalized_service_score,
+            "service_score_original": service_score_original,
+            "food_score": normalized_food_score,
+            "food_score_original": food_score_original,
+            "bath_score": normalized_bath_score,
+            "bath_score_original": bath_score_original,
+            "satisfaction_score": normalized_satisfaction_score,
+            "satisfaction_score_original": satisfaction_score_original,
             "original_score_scale": original_score_scale,
             "reviewer_name": reviewer_name,
             "review_date": review_date,
             "review_comment": review_comment,
             "stay_date": stay_date_for_db,
-            "traveler_type": normalized_traveler_type,
-            "traveler_type_original": original_traveler_type,
-            "purpose_of_visit": normalized_purpose,
-            "purpose_of_visit_original": original_purpose,
             "room_type": normalized_room_type,
             "room_type_original": original_room_type,
             "language_code": language_code,
