@@ -38,10 +38,12 @@ EXCEL_HEADER_MAP = {
     "LOCATION": "立地",
     "SERVICE": "サービス",
     "CLEANLINESS": "清潔感",
-    "FACILITIES": "施設",
-    "ROOM": "客室",
-    "BATH": "風呂",
-    # "FOOD": "食事",
+    "FACILITIES": "施設/設備/アメニティ",
+    "ROOM": "客室/部屋",
+    "BATH": "風呂/温泉",
+    "FOOD": "食事",
+    "BREAKFAST": "料理（朝食）",
+    "DINNER": "料理（夕食）",
 }
 
 def run_crawl_and_save(

@@ -327,6 +327,8 @@ class ReviewScore(models.Model):
         ROOM = "ROOM", _("客室")
         BATH = "BATH", _("風呂")
         FOOD = "FOOD", _("食事")
+        BREAKFAST = "BREAKFAST", _("朝食")
+        DINNER = "DINNER", _("夕食")
         # PRICE_PERFORMANCE = "PRICE_PERFORMANCE", _("コスパ")
 
     review = models.ForeignKey(

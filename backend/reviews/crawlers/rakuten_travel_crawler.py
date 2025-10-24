@@ -7,16 +7,13 @@ import undetected_chromedriver as uc
 from datetime import datetime
 import re
 import pprint
-from ..normalizer import DataNormalizer 
-from reviews.utils import (
-    normalize_score,
-    detect_language,
-    get_language_name_ja
-)
+from ..normalizer import DataNormalizer
+from reviews.utils import normalize_score, detect_language, get_language_name_ja
+
 
 def scrape_rakuten_travel_reviews(
     url: str,
-    hotel_id: str, 
+    hotel_id: str,
     start_date_str: str = None,
     end_date_str: str = None,
 ):
@@ -39,12 +36,13 @@ def scrape_rakuten_travel_reviews(
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-popup-blocking")
 
     driver = uc.Chrome(options=options)
     driver.set_window_size(500, 500)
-    wait = WebDriverWait(driver, 10) 
+    wait = WebDriverWait(driver, 10)
 
-    ota_name = 'rakuten'
+    ota_name = "rakuten"
     normalizer = DataNormalizer()
 
     start_date_obj = None
@@ -74,15 +72,15 @@ def scrape_rakuten_travel_reviews(
         driver.get(url)
         try:
             print("「最新の投稿順」に並び替えます...")
-            
+
             # 1. 「最新の投稿順」のリンクが見つかるまで待機し、取得する
             sort_button = wait.until(
                 EC.element_to_be_clickable((By.LINK_TEXT, "最新の投稿順"))
             )
-            
+
             # 2. リンクをクリックする
             sort_button.click()
-            
+
             # 3. クリックによるページの再読み込みが完了し、口コミが表示されるまで待機
             print("ページの再読み込みを待機しています...")
             wait.until(
@@ -91,12 +89,14 @@ def scrape_rakuten_travel_reviews(
             print("並び替えが完了しました。")
 
         except TimeoutException:
-            print("「最新の投稿順」ボタンが見つからないか、並び替え後のページ読み込みに失敗しました。")
+            print(
+                "「最新の投稿順」ボタンが見つからないか、並び替え後のページ読み込みに失敗しました。"
+            )
             # 並び替えに失敗した場合は、処理を中断するか、そのまま続行するかを決定
             # ここでは処理を中断する
             driver.quit()
             return []
-        
+
         # === 口コミ収集のメインループ (ページが続く限り実行) ===
         while not stop_scraping:
             print(f"\n--- {page_count}ページ目の口コミを収集中 ---")
@@ -121,7 +121,7 @@ def scrape_rakuten_travel_reviews(
             # === 1ページ内の各口コミを処理 ===
             for review_element in review_elements:
                 data = extract_review_data(
-                    review_element, normalizer, hotel_id, ota_name
+                    review_element, normalizer, hotel_id, ota_name, driver, wait
                 )
                 if not data:
                     print("[失敗] この口コミからはデータを抽出できませんでした。")
@@ -131,14 +131,18 @@ def scrape_rakuten_travel_reviews(
                 last_review_date_on_page = review_date_obj
 
                 if end_date_obj and review_date_obj > end_date_obj:
-                    print(f"スキップ: 投稿日({review_date_obj})が終了日({end_date_obj})より新しいため。")
+                    print(
+                        f"スキップ: 投稿日({review_date_obj})が終了日({end_date_obj})より新しいため。"
+                    )
                     continue
 
                 # 【停止判定】開始日より古い口コミが見つかったら停止
                 if start_date_obj and review_date_obj < start_date_obj:
-                    print(f"停止: 投稿日({review_date_obj})が開始日({start_date_obj})より古いため、収集を終了します。")
-                    driver.quit()   
-                    return all_reviews_data         
+                    print(
+                        f"停止: 投稿日({review_date_obj})が開始日({start_date_obj})より古いため、収集を終了します。"
+                    )
+                    driver.quit()
+                    return all_reviews_data
 
                 print(f" 投稿日: {data['review_date']} (処理対象)")
                 del data["posted_datetime_obj"]
@@ -169,24 +173,29 @@ def scrape_rakuten_travel_reviews(
 
     except Exception as e:
         print(f"予期せぬエラーが発生しました: {e}")
-        if 'driver' in locals() and driver.service.is_connectable():
+        if "driver" in locals() and driver.service.is_connectable():
             driver.quit()
-        return all_reviews_data 
+        return all_reviews_data
 
     print("\nブラウザを終了します。")
     driver.quit()
     return all_reviews_data
 
 
-def extract_review_data(review_element, normalizer, hotel_id, ota_name):
+def extract_review_data(review_element, normalizer, hotel_id, ota_name, driver, wait):
     """
-    単一のレビュー要素(div.revRvwUserEntry)から必要なデータを抽出する関数
+    単一のレビュー要素から必要なデータを抽出し、詳細ページからサブスコアも取得する関数
     Args:
         review_element: 口コミ1件分のコンテナ要素 (WebElement)
+        driver: SeleniumのWebDriverオブジェクト
+        wait: WebDriverWaitオブジェクト
     Returns:
         dict: 抽出した口コミデータ。抽出失敗時はNoneを返す。
     """
     original_score_scale = 5
+
+    main_window = driver.current_window_handle
+
     try:
         # --- 基本情報の抽出 ---
         # 評価点 (例: "5")
@@ -201,14 +210,16 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
         )
         # 投稿者名
         # <span class="user">投稿者さん</span>
-        user_full_text = review_element.find_element(By.CSS_SELECTOR, "span.user").text.strip()
+        user_full_text = review_element.find_element(
+            By.CSS_SELECTOR, "span.user"
+        ).text.strip()
 
         reviewer_name = user_full_text
         age_group = None
         gender = None
 
         # 角括弧が含まれているかチェックして情報を分割
-        if '[' in user_full_text and ']' in user_full_text:
+        if "[" in user_full_text and "]" in user_full_text:
             try:
                 match = re.search(r"^(.*?)\s*\[(.*?)\]$", user_full_text)
                 if match:
@@ -216,7 +227,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
                     details = match.group(2).strip()
 
                     # 詳細情報を'/'で分割
-                    detail_parts = details.split('/')
+                    detail_parts = details.split("/")
                     if len(detail_parts) == 2:
                         age_group = detail_parts[0].strip()
                         gender = detail_parts[1].strip()
@@ -283,9 +294,7 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
                     "%Y-%m-%d"
                 )  # "YYYY-MM-DD"形式の文字列
             except ValueError:
-                print(
-                    f"[警告] 宿泊年月のフォーマットが不正です: '{stay_month_str}'"
-                )
+                print(f"[警告] 宿泊年月のフォーマットが不正です: '{stay_month_str}'")
         original_traveler_type = purpose_data.get("同伴者")
         original_purpose = purpose_data.get("旅行の目的")
 
@@ -295,17 +304,103 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
         normalized_purpose = normalizer.normalize_purpose(
             original_purpose or original_traveler_type, ota_name
         )
-        print("-" * 20)
-
+  
         normalized_room_type = normalizer.normalize_room_type(
             original_room_type, hotel_id, ota_name
         )
+
+        try:
+            # 1. 詳細ページへのリンクURLを取得
+            detail_link_element = review_element.find_element(
+                By.CSS_SELECTOR, "h2.commentTitle a"
+            )
+            detail_url = detail_link_element.get_attribute("href")
+
+            # 2. 新しいタブで詳細ページを開く
+            driver.execute_script("window.open(arguments[0], '_blank');", detail_url)
+
+            # 3. 新しいタブが開くまで待機し、そちらに切り替える
+            wait.until(EC.number_of_windows_to_be(2))
+            driver.switch_to.window(driver.window_handles[1])
+
+            # 4. 詳細ページでサブスコアの要素が読み込まれるのを待つ
+            wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.rateDetail"))
+            )
+
+            # 5. サブスコアを抽出
+            score_elements = driver.find_elements(
+                By.CSS_SELECTOR, "ul.rateDetail li, ul.rateList li"
+            )
+
+            for item in score_elements:
+                try:
+                    name = item.find_element(By.TAG_NAME, "em").text.strip()
+                    score_text = item.find_element(
+                        By.CSS_SELECTOR, "span.rate"
+                    ).text.strip()
+
+                    # 項目名に応じて、対応する変数に値を格納
+                    if name == "サービス":
+                        service_score_original = score_text
+                        normalized_service_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                    elif name == "立地":
+                        location_score_original = score_text
+                        normalized_location_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                    elif name == "部屋":
+                        room_score_original = score_text
+                        normalized_room_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                    elif name == "設備・アメニティ":
+                        facilities_score_original = score_text
+                        normalized_facilities_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                    elif name == "風呂":
+                        bath_score_original = score_text
+                        normalized_bath_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                    elif name == "食事":
+                        food_score_original = score_text
+                        normalized_food_score = normalize_score(
+                            score_text, original_score_scale
+                        )
+                except NoSuchElementException:
+                    continue
+
+        except (TimeoutException, NoSuchElementException, IndexError) as e:
+            print(f"    [情報] サブスコアの取得に失敗しました: {e}")
+            # サブスコアが取得できなくても、エラーとせず処理を続行
+
+        finally:
+            # 6. (重要) タブが2つ以上ある場合、現在のタブを閉じて元のタブに戻る
+            if len(driver.window_handles) > 1:
+                driver.close()
+                driver.switch_to.window(main_window)
 
         # 抽出したデータを辞書にまとめる
         review_data = {
             "posted_datetime_obj": review_datetime,
             "overall_score": normalized_overall_score,  # 正規化後のスコア
             "overall_score_original": overall_score_original_text,  # 元のスコア
+            "service_score": normalized_service_score,
+            "service_score_original": service_score_original,
+            "location_score": normalized_location_score,
+            "location_score_original": location_score_original,
+            "room_score": normalized_room_score,
+            "room_score_original": room_score_original,
+            "facilities_score": normalized_facilities_score,
+            "facilities_score_original": facilities_score_original,
+            "bath_score": normalized_bath_score,
+            "bath_score_original": bath_score_original,
+            "food_score": normalized_food_score,
+            "food_score_original": food_score_original,
             "original_score_scale": original_score_scale,  # 元の評価尺度
             "reviewer_name": reviewer_name,
             "age_group": age_group,
@@ -326,7 +421,13 @@ def extract_review_data(review_element, normalizer, hotel_id, ota_name):
 
     except NoSuchElementException as e:
         print(f"必須要素が見つかりませんでした: {e}")
+        if len(driver.window_handles) > 1:
+            driver.close()
+            driver.switch_to.window(main_window)
         return None
     except (ValueError, IndexError) as e:
         print(f"データの変換または解析に失敗しました: {e}")
+        if len(driver.window_handles) > 1:
+            driver.close()
+            driver.switch_to.window(main_window)
         return None
